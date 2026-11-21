@@ -68,7 +68,8 @@ The script:
    - `copilot` (platform runtime, minus duplicate SDK/docs/type files)
    - `licenses`
 4. Invokes pkg with `bytecode: true`, GZip compression and the asset globs.
-5. Writes the binary and a `.sha256` file under `release/`.
+5. On Windows, replaces the executable's icon resources with `docs/media/minions-ai.ico`.
+6. Writes the binary and a `.sha256` file under `release/`.
 
 pkg turns the app into bytecode and embeds the asset ZIPs under the executable's snapshot path. At runtime, `src/core/embedded-assets.ts` verifies every extracted file against its manifest, rejects traversal paths, extracts into a temporary sibling directory, and atomically renames it into the versioned cache. The marker `.ready` makes later launches instant.
 

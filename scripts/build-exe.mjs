@@ -17,6 +17,7 @@ import { dirname, join, relative, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { zipSync } from 'fflate';
 import { build } from 'esbuild';
+import { Data, NtExecutable, NtExecutableResource, Resource } from 'resedit';
 
 const ROOT = resolve(import.meta.dirname, '..');
 const args = process.argv.slice(2);
@@ -125,6 +126,17 @@ writeFileSync(pkgConfig, JSON.stringify({
 
 const output = join(RELEASE, `minions-ai-${targetArg}${target.ext}`);
 run('npx', ['--no-install', 'pkg', '-c', 'build/exe/pkg.config.json', '-o', `release/minions-ai-${targetArg}${target.ext}`, 'build/exe/app.cjs'], `package ${targetArg}`);
+
+if (target.platform === 'win32') {
+  // @yao-pkg/pkg has no icon option: replace the executable's icon resources.
+  const exe = NtExecutable.from(readFileSync(output), { ignoreCert: true });
+  const resources = NtExecutableResource.from(exe);
+  const icon = Data.IconFile.from(readFileSync(join(ROOT, 'docs', 'media', 'minions-ai.ico')));
+  Resource.IconGroupEntry.replaceIconsForResource(resources.entries, 1, 1033, icon.icons.map((item) => item.data));
+  resources.outputResource(exe);
+  writeFileSync(output, Buffer.from(exe.generate()));
+  console.log(`embedded icon: docs/media/minions-ai.ico (${icon.icons.length} sizes)`);
+}
 
 const checksum = createHash('sha256').update(readFileSync(output)).digest('hex');
 writeFileSync(`${output}.sha256`, `${checksum}  ${relative(ROOT, output).replaceAll('\\', '/')}\n`);
