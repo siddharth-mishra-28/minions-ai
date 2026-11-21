@@ -45,15 +45,20 @@ features:
 
 These files are rebuilt from the latest commit on every push. Checksums: [SHA256SUMS](https://siddharth-mishra-28.github.io/minions-ai/downloads/SHA256SUMS).
 
-Double-click the executable to start the cockpit in your default browser. From a terminal the explicit forms are:
+Double-click the Windows executable, or unzip the macOS download and open **Minions-ai.app**, to start the cockpit in your default browser. From a terminal the explicit forms are:
 
 ```bash
 # Windows
 minions-ai.exe ui
 
-# macOS / Linux
-./minions-ai ui
+# macOS (inside the app bundle)
+./Minions-ai.app/Contents/MacOS/minions-ai ui
+
+# Linux (after extracting the tarball)
+cd minions-ai-linux-x64 && ./minions-ai ui
 ```
+
+On Linux, `./install.sh` adds the binary to `~/.local/bin` and the Minions-ai icon to your application menu.
 
 The first launch opens the setup wizard. Pick your provider, test the connection, and start the starter Software Delivery Team.
 

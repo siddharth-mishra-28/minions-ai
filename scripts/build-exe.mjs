@@ -12,12 +12,13 @@
  *   node scripts/build-exe.mjs --target linux-x64
  */
 import { createHash } from 'node:crypto';
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { dirname, join, relative, resolve } from 'node:path';
+import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { basename, dirname, join, relative, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { zipSync } from 'fflate';
 import { build } from 'esbuild';
 import { Data, NtExecutable, NtExecutableResource, Resource } from 'resedit';
+import { loadIconMaster, writeIcns, writeIconSet } from './icons.mjs';
 
 const ROOT = resolve(import.meta.dirname, '..');
 const args = process.argv.slice(2);
@@ -38,12 +39,14 @@ if (!target) {
 const STAGE = join(ROOT, 'build', 'exe');
 const ASSETS = join(STAGE, 'assets');
 const RELEASE = join(ROOT, 'release');
+const ICON_MASTER = join(ROOT, 'docs', 'media', 'minions-ai-icon.png');
+const VERSION = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')).version;
 const assetPlatform = `${target.platform === 'win32' ? 'win32' : target.platform}-${target.arch}`;
 
-function run(command, commandArgs, label) {
+function run(command, commandArgs, label, cwd = ROOT) {
   console.log(`\n> ${label ?? command}`);
   const needsShell = process.platform === 'win32' && (command === 'npm' || command === 'npx');
-  const result = spawnSync(command, commandArgs, { cwd: ROOT, stdio: 'inherit', env: process.env, shell: needsShell });
+  const result = spawnSync(command, commandArgs, { cwd, stdio: 'inherit', env: process.env, shell: needsShell });
   if (result.status !== 0) throw new Error(`${label ?? command} failed with exit ${result.status}`);
 }
 
@@ -75,6 +78,64 @@ function checkCopilot() {
     throw new Error(`Copilot runtime for ${assetPlatform} is not installed. Build this target on its native OS or install @github/copilot-sdk-${assetPlatform}.`);
   }
   return pkg;
+}
+
+function macAppBundle(binary) {
+  const bundle = join(RELEASE, 'Minions-ai.app');
+  const archive = join(RELEASE, `minions-ai-${targetArg}.zip`);
+  rmSync(bundle, { recursive: true, force: true });
+  mkdirSync(join(bundle, 'Contents', 'MacOS'), { recursive: true });
+  mkdirSync(join(bundle, 'Contents', 'Resources'), { recursive: true });
+
+  const executable = join(bundle, 'Contents', 'MacOS', 'minions-ai');
+  copyFileSync(binary, executable);
+  chmodSync(executable, 0o755);
+  const sizes = writeIcns(join(bundle, 'Contents', 'Resources', 'minions-ai.icns'), loadIconMaster(ICON_MASTER));
+  writeFileSync(join(bundle, 'Contents', 'Info.plist'), `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleDevelopmentRegion</key><string>en</string>
+  <key>CFBundleDisplayName</key><string>Minions-ai</string>
+  <key>CFBundleExecutable</key><string>minions-ai</string>
+  <key>CFBundleIconFile</key><string>minions-ai</string>
+  <key>CFBundleIdentifier</key><string>ai.minions.desktop</string>
+  <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+  <key>CFBundleName</key><string>Minions-ai</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleShortVersionString</key><string>${VERSION}</string>
+  <key>CFBundleVersion</key><string>${VERSION}</string>
+  <key>LSMinimumSystemVersion</key><string>12.0</string>
+  <key>NSHighResolutionCapable</key><true/>
+</dict>
+</plist>
+`);
+
+  rmSync(archive, { force: true });
+  run('ditto', ['-c', '-k', '--keepParent', bundle, archive], 'bundle macOS .app');
+  console.log(`app icon: Minions-ai.app/Contents/Resources/minions-ai.icns (${sizes} sizes)`);
+  return archive;
+}
+
+function linuxPackage(binary) {
+  const stageRoot = join(ROOT, 'build', 'linux-package');
+  const stage = join(stageRoot, `minions-ai-${targetArg}`);
+  const archive = join(RELEASE, `minions-ai-${targetArg}.tar.gz`);
+  rmSync(stage, { recursive: true, force: true });
+  mkdirSync(stage, { recursive: true });
+
+  copyFileSync(binary, join(stage, 'minions-ai'));
+  chmodSync(join(stage, 'minions-ai'), 0o755);
+  copyFileSync(join(ROOT, 'scripts', 'linux', 'minions-ai.desktop'), join(stage, 'minions-ai.desktop'));
+  copyFileSync(join(ROOT, 'scripts', 'linux', 'install.sh'), join(stage, 'install.sh'));
+  chmodSync(join(stage, 'install.sh'), 0o755);
+  const sizes = writeIconSet(join(stage, 'icons'), loadIconMaster(ICON_MASTER));
+
+  rmSync(archive, { force: true });
+  const archivePath = relative(stageRoot, archive).replaceAll('\\', '/');
+  run('tar', ['-czf', archivePath, basename(stage)], 'package Linux tarball', stageRoot);
+  console.log(`desktop entry + icons: ${basename(stage)}/ (${sizes.length} sizes)`);
+  return archive;
 }
 
 console.log(`Building Minions-ai for ${targetArg} (${target.pkg})`);
@@ -138,7 +199,11 @@ if (target.platform === 'win32') {
   console.log(`embedded icon: docs/media/minions-ai.ico (${icon.icons.length} sizes)`);
 }
 
-const checksum = createHash('sha256').update(readFileSync(output)).digest('hex');
-writeFileSync(`${output}.sha256`, `${checksum}  ${relative(ROOT, output).replaceAll('\\', '/')}\n`);
-console.log(`\nBuilt ${output}`);
+let shipped = output;
+if (target.platform === 'darwin') shipped = macAppBundle(output);
+else if (target.platform === 'linux') shipped = linuxPackage(output);
+
+const checksum = createHash('sha256').update(readFileSync(shipped)).digest('hex');
+writeFileSync(`${shipped}.sha256`, `${checksum}  ${basename(shipped)}\n`);
+console.log(`\nBuilt ${shipped}`);
 console.log(`SHA-256 ${checksum}`);

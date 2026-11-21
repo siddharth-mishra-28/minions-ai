@@ -51,8 +51,9 @@ minions-ai.exe init            # provider + key, then the agents and sample team
 minions-ai.exe serve           # cockpit on http://127.0.0.1:3100
 ```
 
-On macOS/Linux use `./minions-ai`. You can also run `minions-ai.exe ui` to open the cockpit
-immediately.
+On macOS the commands live inside the bundle: `Minions-ai.app/Contents/MacOS/minions-ai init`.
+On Linux extract the tarball and use `./minions-ai-linux-x64/minions-ai`. You can also open the
+cockpit immediately with `minions-ai.exe ui` (Windows), `Minions-ai.app`, or `./minions-ai ui`.
 
 Open <http://127.0.0.1:3100>. If you skipped `init`, the first screen is onboarding: choose
 **Settings → Providers**, add your endpoint, model and key, and mark it as the default. The key

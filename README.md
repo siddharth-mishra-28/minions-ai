@@ -34,15 +34,15 @@ Pick the executable for your operating system. Each download is a single file; t
 | Platform | Download | First run |
 | --- | --- | --- |
 | **Windows x64** | [`minions-ai-win-x64.exe`](https://siddharth-mishra-28.github.io/minions-ai/downloads/minions-ai-win-x64.exe) | Double-click, or run `minions-ai.exe ui` |
-| **macOS Apple Silicon** | [`minions-ai-mac-arm64.zip`](https://siddharth-mishra-28.github.io/minions-ai/downloads/minions-ai-mac-arm64.zip) | Unzip, then `./minions-ai ui` |
-| **macOS Intel** | [`minions-ai-mac-x64.zip`](https://siddharth-mishra-28.github.io/minions-ai/downloads/minions-ai-mac-x64.zip) | Unzip, then `./minions-ai ui` |
-| **Linux x64** | [`minions-ai-linux-x64.tar.gz`](https://siddharth-mishra-28.github.io/minions-ai/downloads/minions-ai-linux-x64.tar.gz) | Extract, then `./minions-ai ui` |
+| **macOS Apple Silicon** | [`minions-ai-mac-arm64.zip`](https://siddharth-mishra-28.github.io/minions-ai/downloads/minions-ai-mac-arm64.zip) | Unzip, then open **Minions-ai.app** |
+| **macOS Intel** | [`minions-ai-mac-x64.zip`](https://siddharth-mishra-28.github.io/minions-ai/downloads/minions-ai-mac-x64.zip) | Unzip, then open **Minions-ai.app** |
+| **Linux x64** | [`minions-ai-linux-x64.tar.gz`](https://siddharth-mishra-28.github.io/minions-ai/downloads/minions-ai-linux-x64.tar.gz) | Extract, then run `./minions-ai ui` (or `./install.sh`) |
 
 Every download above is the build from the latest commit, hosted on the project site. Verify it against [`SHA256SUMS`](https://siddharth-mishra-28.github.io/minions-ai/downloads/SHA256SUMS); tagged releases are also on [GitHub](https://github.com/siddharth-mishra-28/minions-ai/releases/latest).
 
 ### First launch
 
-Double-click the executable to start the cockpit and open it in your default browser. The explicit equivalent is `minions-ai.exe ui`; every command, option and CLI workflow is still available through arguments.
+Double-click the executable (or **Minions-ai.app** on macOS) to start the cockpit and open it in your default browser. The explicit equivalent is `minions-ai.exe ui`; every command, option and CLI workflow is still available through arguments.
 
 **Windows**
 
@@ -56,19 +56,26 @@ If SmartScreen appears, choose **More info → Run anyway**. The executable is n
 
 ```bash
 unzip minions-ai-mac-arm64.zip
-chmod +x minions-ai
-xattr -dr com.apple.quarantine ./minions-ai   # only if Gatekeeper blocks an unsigned build
-./minions-ai ui
+open Minions-ai.app        # or double-click it in Finder
+
+# Gatekeeper blocked an unsigned build? Right-click the app -> Open, or:
+xattr -dr com.apple.quarantine Minions-ai.app
+
+# CLI flags run through the bundle:
+./Minions-ai.app/Contents/MacOS/minions-ai --help
 ```
 
-You can also right-click the binary and choose **Open** the first time. Builds are unsigned unless the release notes say otherwise.
+Builds are unsigned unless the release notes say otherwise.
 
 **Linux**
 
 ```bash
 tar -xzf minions-ai-linux-x64.tar.gz
-chmod +x minions-ai
+cd minions-ai-linux-x64
 ./minions-ai ui
+
+# Optional: install under ~/.local/bin with the Minions-ai icon in your app menu
+./install.sh
 ```
 
 `ui` starts the cockpit and opens `http://127.0.0.1:3100` in your browser. On a headless machine use `ui --no-open` or `serve`.

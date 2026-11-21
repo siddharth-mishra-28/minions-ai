@@ -42,8 +42,8 @@ npm --prefix web test
 
 ```bash
 npm run build:exe:win     # Windows x64   -> release/minions-ai-win-x64.exe
-npm run build:exe:mac     # macOS arm64   -> release/minions-ai-mac-arm64
-npm run build:exe:linux   # Linux x64     -> release/minions-ai-linux-x64
+npm run build:exe:mac     # macOS arm64   -> release/Minions-ai.app + minions-ai-mac-arm64.zip
+npm run build:exe:linux   # Linux x64     -> release/minions-ai-linux-x64.tar.gz
 ```
 
 Or pass an explicit target:
@@ -69,7 +69,11 @@ The script:
    - `licenses`
 4. Invokes pkg with `bytecode: true`, GZip compression and the asset globs.
 5. On Windows, replaces the executable's icon resources with `docs/media/minions-ai.ico`.
-6. Writes the binary and a `.sha256` file under `release/`.
+6. On macOS, wraps the binary in `Minions-ai.app` with `Contents/Resources/minions-ai.icns`, generated from `docs/media/minions-ai-icon.png`, and archives the bundle with `ditto` as `minions-ai-<target>.zip`.
+7. On Linux, stages the binary with `minions-ai.desktop`, `install.sh` and a hicolor icon set generated from `docs/media/minions-ai-icon.png`, then archives them as `minions-ai-<target>.tar.gz`.
+8. Writes the shipped archive and its `.sha256` file under `release/`.
+
+The icon master is `docs/media/minions-ai-icon.png` (1024 px, rendered from `docs/media/minions-ai-icon.svg`). `scripts/icons.mjs` resizes it and assembles the macOS `.icns` with Node's `zlib` only, so no native image tooling is needed on any build host.
 
 pkg turns the app into bytecode and embeds the asset ZIPs under the executable's snapshot path. At runtime, `src/core/embedded-assets.ts` verifies every extracted file against its manifest, rejects traversal paths, extracts into a temporary sibling directory, and atomically renames it into the versioned cache. The marker `.ready` makes later launches instant.
 
@@ -97,14 +101,14 @@ The workflow publishes stable names so `releases/latest/download/...` never chan
 | `minions-ai-linux-x64.tar.gz` | Linux x64 |
 | `SHA256SUMS` | All of the above |
 
-macOS and Linux binaries are archived by the workflow (`ditto` or `zip`, `tar -czf`). Windows ships the `.exe` directly. The workflow builds on native runners (`windows-latest`, `macos-14`, `ubuntu-latest`), runs `--version`/`--help`, starts `serve` and checks `/api/status`, then uploads the artifact. A `v*` tag creates the GitHub Release and uploads the stable assets.
+The macOS zip contains `Minions-ai.app` with the Minions-ai icon; open the app or run `Minions-ai.app/Contents/MacOS/minions-ai`. The Linux tarball extracts to `minions-ai-linux-x64/` with the binary, `minions-ai.desktop`, an icon set and `install.sh`, which installs the binary under `~/.local/bin` with a menu entry. Windows ships the `.exe` directly. The workflow builds on native runners (`windows-latest`, `macos-15`, `macos-15-intel`, `ubuntu-latest`), runs `--version`/`--help`, starts `serve` and checks `/api/status`, verifies the bundle/tarball layout, then uploads the artifact. A `v*` tag creates the GitHub Release and uploads the stable assets.
 
 ## GitHub Actions
 
 `.github/workflows/release.yml` has three jobs:
 
 - **build** — matrix across Windows, macOS ARM and Linux; installs dependencies, builds the cockpit and executable, smokes the CLI/server, and uploads the artifact.
-- **release** — on a `v*` tag, downloads all artifacts, archives the macOS/Linux binaries, creates the release, uploads stable names and writes `SHA256SUMS`.
+- **release** — on a `v*` tag, downloads all artifacts, verifies their checksums, creates the release, uploads stable names and writes `SHA256SUMS`.
 - **pages** — builds the VitePress site from this README and `docs/`, then deploys it with GitHub Pages.
 
 Permissions are `contents: write`, `pages: write` and `id-token: write`. Actions uses the built-in `GITHUB_TOKEN`; no personal access token is stored in the repository. The Pages URL is:
@@ -115,9 +119,9 @@ https://siddharth-mishra-28.github.io/minions-ai/
 
 ## Signing
 
-Unsigned Windows binaries trigger SmartScreen; unsigned macOS binaries trigger Gatekeeper. The project does not ship certificates.
+Unsigned Windows binaries trigger SmartScreen; unsigned macOS app bundles trigger Gatekeeper. The project does not ship certificates.
 
-For Windows Authenticode, set the certificate in the release environment and sign the `.exe` with `signtool` before upload. For macOS, sign with a Developer ID Application certificate, then notarize and staple the result. Keep certificate material in CI secrets, never in the repository. Document in the release notes whether a build is signed.
+For Windows Authenticode, set the certificate in the release environment and sign the `.exe` with `signtool` before upload. For macOS, sign `Minions-ai.app` with a Developer ID Application certificate, then notarize and staple the zip before upload. Keep certificate material in CI secrets, never in the repository. Document in the release notes whether a build is signed.
 
 ## Verification
 
@@ -132,6 +136,8 @@ minions-ai.exe serve --port 3110 --db .\smoke.db
 ```
 
 Then check `/api/status`, `/openapi.json`, `/docs`, `/docs/static/swagger-ui.css`, `/` and a cockpit JS asset. `ui --no-open` should behave the same as `serve` plus the cockpit URL.
+
+On macOS the executable lives inside the bundle: `Minions-ai.app/Contents/MacOS/minions-ai`. On Linux, extract the tarball first; the binary is `minions-ai-linux-x64/minions-ai`.
 
 For an end-to-end model run, set `MIMO_API_KEY` in the environment and use the xiaomi preset:
 
@@ -162,7 +168,7 @@ Packaged builds use the platform data directory instead of the current working d
 | `Cannot find module ... better_sqlite3.node` | The extracted native path was not applied. Confirm `isPackaged()` is true and the cache contains `assets/native/better_sqlite3.node`. |
 | `import.meta.url` error at startup | The CJS bundle must use `moduleDir`/`moduleFile`; do not call `fileURLToPath(import.meta.url)` at module load in code that is bundled to CJS. |
 | Massive binary / slow first run | The Copilot runtime is about 100 MB and is extracted once. Exclude duplicate SDK/docs/type files from the `copilot` group if you change the staging filter. |
-| macOS cannot open the binary | Unsigned builds need Gatekeeper approval (`xattr -dr com.apple.quarantine`) or a signed/notarized release. |
+| macOS cannot open the app | Unsigned builds need Gatekeeper approval (right-click → Open, or `xattr -dr com.apple.quarantine Minions-ai.app`) or a signed/notarized release. |
 
 ## Known limits
 

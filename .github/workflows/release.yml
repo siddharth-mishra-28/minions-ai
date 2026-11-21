@@ -23,20 +23,20 @@ jobs:
         include:
           - os: windows-latest
             target: win-x64
-            artifact: minions-ai-win-x64.exe
-            binary: minions-ai-win-x64.exe
+            asset: minions-ai-win-x64.exe
+            binary: release/minions-ai-win-x64.exe
           - os: macos-15
             target: mac-arm64
-            artifact: minions-ai-mac-arm64
-            binary: minions-ai-mac-arm64
+            asset: minions-ai-mac-arm64.zip
+            binary: release/Minions-ai.app/Contents/MacOS/minions-ai
           - os: macos-15-intel
             target: mac-x64
-            artifact: minions-ai-mac-x64
-            binary: minions-ai-mac-x64
+            asset: minions-ai-mac-x64.zip
+            binary: release/Minions-ai.app/Contents/MacOS/minions-ai
           - os: ubuntu-latest
             target: linux-x64
-            artifact: minions-ai-linux-x64
-            binary: minions-ai-linux-x64
+            asset: minions-ai-linux-x64.tar.gz
+            binary: release/minions-ai-linux-x64
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -66,7 +66,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          BIN="release/${{ matrix.binary }}"
+          BIN="${{ matrix.binary }}"
           chmod +x "$BIN" || true
           "$BIN" --version
           "$BIN" --help > /dev/null
@@ -74,7 +74,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          BIN="release/${{ matrix.binary }}"
+          BIN="${{ matrix.binary }}"
           chmod +x "$BIN" || true
           "$BIN" serve --port 3110 --db ./smoke.db > server.log 2>&1 &
           SERVER_PID=$!
@@ -89,13 +89,26 @@ jobs:
           curl -fsS http://127.0.0.1:3110/ > /dev/null
           kill $SERVER_PID
           trap - EXIT
+      - name: Verify packaged layout
+        if: matrix.target != 'win-x64'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ matrix.target }}" = "linux-x64" ]; then
+            tar -tzf "release/${{ matrix.asset }}" | grep -qx 'minions-ai-linux-x64/minions-ai'
+            tar -tzf "release/${{ matrix.asset }}" | grep -qx 'minions-ai-linux-x64/minions-ai.desktop'
+            tar -tzf "release/${{ matrix.asset }}" | grep -qx 'minions-ai-linux-x64/icons/minions-ai-512.png'
+          else
+            unzip -l "release/${{ matrix.asset }}" | grep -q 'Minions-ai.app/Contents/Resources/minions-ai.icns'
+            unzip -l "release/${{ matrix.asset }}" | grep -q 'Minions-ai.app/Contents/MacOS/minions-ai'
+          fi
       - name: Upload executable
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact }}
+          name: ${{ matrix.asset }}
           path: |
-            release/${{ matrix.binary }}
-            release/${{ matrix.binary }}.sha256
+            release/${{ matrix.asset }}
+            release/${{ matrix.asset }}.sha256
 
   release:
     name: publish release
@@ -109,21 +122,11 @@ jobs:
         with:
           path: dist
           merge-multiple: true
-      - name: Normalize stable assets and checksums
+      - name: Verify artifacts and checksums
         run: |
           set -euo pipefail
           cd dist
-          chmod +x minions-ai-mac-arm64 minions-ai-mac-x64 minions-ai-linux-x64 2>/dev/null || true
-          cp minions-ai-mac-arm64 minions-ai
-          zip -j minions-ai-mac-arm64.zip minions-ai
-          rm minions-ai
-          cp minions-ai-mac-x64 minions-ai
-          zip -j minions-ai-mac-x64.zip minions-ai
-          rm minions-ai
-          cp minions-ai-linux-x64 minions-ai
-          tar -czf minions-ai-linux-x64.tar.gz minions-ai
-          rm minions-ai
-          rm -f minions-ai-mac-arm64 minions-ai-mac-x64 minions-ai-linux-x64
+          sha256sum -c ./*.sha256
           sha256sum minions-ai-win-x64.exe minions-ai-mac-arm64.zip minions-ai-mac-x64.zip minions-ai-linux-x64.tar.gz > SHA256SUMS
           cat SHA256SUMS
       - name: Create GitHub release
@@ -158,21 +161,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p site/public/downloads
-          cp dist/minions-ai-win-x64.exe site/public/downloads/
-          cp dist/minions-ai-mac-arm64 site/public/downloads/minions-ai-mac-arm64
-          cp dist/minions-ai-mac-x64 site/public/downloads/minions-ai-mac-x64
-          cp dist/minions-ai-linux-x64 site/public/downloads/minions-ai-linux-x64
-          chmod +x site/public/downloads/minions-ai-mac-arm64 site/public/downloads/minions-ai-mac-x64 site/public/downloads/minions-ai-linux-x64
+          cp dist/minions-ai-win-x64.exe dist/minions-ai-mac-arm64.zip dist/minions-ai-mac-x64.zip dist/minions-ai-linux-x64.tar.gz site/public/downloads/
           cd site/public/downloads
-          mv minions-ai-mac-arm64 minions-ai
-          zip -q -j minions-ai-mac-arm64.zip minions-ai
-          rm minions-ai
-          mv minions-ai-mac-x64 minions-ai
-          zip -q -j minions-ai-mac-x64.zip minions-ai
-          rm minions-ai
-          mv minions-ai-linux-x64 minions-ai
-          tar -czf minions-ai-linux-x64.tar.gz minions-ai
-          rm minions-ai
           sha256sum minions-ai-win-x64.exe minions-ai-mac-arm64.zip minions-ai-mac-x64.zip minions-ai-linux-x64.tar.gz > SHA256SUMS
           cat SHA256SUMS
       - uses: actions/setup-node@v4

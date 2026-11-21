@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Minions-ai
+Comment=A software factory of custom AI agent teams
+Exec=minions-ai
+TryExec=minions-ai
+Icon=minions-ai
+Terminal=false
+Categories=Development;Utility;
+StartupNotify=false

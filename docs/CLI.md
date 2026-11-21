@@ -1,6 +1,6 @@
 # CLI reference
 
-Use `minions-ai.exe` on Windows and `./minions-ai` on macOS/Linux. The examples below use the Windows name; substitute the binary you downloaded. Every command accepts `--help` after the command name.
+Use `minions-ai.exe` on Windows, `Minions-ai.app/Contents/MacOS/minions-ai` in the macOS bundle, and `./minions-ai` inside the extracted Linux tarball. The examples below use the Windows name; substitute the binary you downloaded. Every command accepts `--help` after the command name.
 
 ```text
 minions-ai --version
