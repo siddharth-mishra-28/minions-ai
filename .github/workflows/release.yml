@@ -95,12 +95,14 @@ jobs:
         run: |
           set -euo pipefail
           if [ "${{ matrix.target }}" = "linux-x64" ]; then
-            tar -tzf "release/${{ matrix.asset }}" | grep -qx 'minions-ai-linux-x64/minions-ai'
-            tar -tzf "release/${{ matrix.asset }}" | grep -qx 'minions-ai-linux-x64/minions-ai.desktop'
-            tar -tzf "release/${{ matrix.asset }}" | grep -qx 'minions-ai-linux-x64/icons/minions-ai-512.png'
+            tar -tzf "release/${{ matrix.asset }}" > layout.txt
+            grep -qx 'minions-ai-linux-x64/minions-ai' layout.txt
+            grep -qx 'minions-ai-linux-x64/minions-ai.desktop' layout.txt
+            grep -qx 'minions-ai-linux-x64/icons/minions-ai-512.png' layout.txt
           else
-            unzip -l "release/${{ matrix.asset }}" | grep -q 'Minions-ai.app/Contents/Resources/minions-ai.icns'
-            unzip -l "release/${{ matrix.asset }}" | grep -q 'Minions-ai.app/Contents/MacOS/minions-ai'
+            unzip -l "release/${{ matrix.asset }}" > layout.txt
+            grep -q 'Minions-ai.app/Contents/Resources/minions-ai.icns' layout.txt
+            grep -q 'Minions-ai.app/Contents/MacOS/minions-ai' layout.txt
           fi
       - name: Upload executable
         uses: actions/upload-artifact@v4
