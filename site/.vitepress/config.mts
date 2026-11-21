@@ -44,9 +44,6 @@ export default defineConfig({
         ],
       },
     ],
-    socialLinks: [
-      { icon: 'github', link: 'https://github.com/siddharth-mishra-28/minions-ai' },
-    ],
     footer: {
       message: 'Built with the GitHub Copilot agent runtime.',
       copyright: 'Developed by <a href="https://www.linkedin.com/in/connect-2-siddharth/">Siddharth Mishra</a> · Copyright © 2026 Minions-ai contributors',
