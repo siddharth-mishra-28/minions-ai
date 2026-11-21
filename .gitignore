@@ -1,0 +1,71 @@
+# dependencies
+node_modules/
+
+# build output (npm run build -> tsc + Vite)
+dist/
+*.tsbuildinfo
+
+# runtime data: SQLite database, audit log JSONL and server state
+data/
+.minion/
+*.db-shm
+*.db-wal
+
+# local secrets and machine-specific config
+.env
+.env.*
+.freebuff/
+.claude/
+
+# run/chat transcripts, workflow folders and agent workspaces (runtime output)
+runs/
+run_*/
+.chats/
+workflow_*/
+# team run workspaces (one folder per team_<id> run) — anchored so source folders named teams/ are not ignored
+/teams/
+workspace/
+workspace-*/
+
+# CI and verification output: generated apps, reports, dependency caches
+app/
+reports/
+tools/
+.npm/
+.npm-global/
+.m2/
+.tmp/
+
+# acceptance evidence, backups and smoke output
+evidence/
+evidences/
+backup/
+.smoke/
+
+# packaged artifacts and archives
+*.tgz
+*.tar.gz
+*.zip
+*.exe
+build/
+release/
+
+# generated Pages files
+site/public/
+site/.vitepress/dist/
+site/.vitepress/cache/
+site/README.md
+site/TEAMS-GUIDE.md
+site/A2A.md
+site/UAT.md
+site/EXECUTABLE.md
+site/CLI.md
+site/API.md
+site/SECURITY.md
+
+# logs, coverage and editor/OS noise
+*.log
+npm-debug.log*
+coverage/
+.DS_Store
+Thumbs.db

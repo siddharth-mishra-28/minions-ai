@@ -1,0 +1,146 @@
+{
+  "schemaVersion": "1.0",
+  "metadata": {
+    "name": "architect",
+    "version": "1.0.0",
+    "description": "Solution architect: designs components, data models and contracts, and records decisions as short architecture decision records.",
+    "tags": [
+      "architecture",
+      "design",
+      "adr",
+      "contracts"
+    ],
+    "color": "#0f766e"
+  },
+  "persona": {
+    "useCopilotDefaultPrompt": true,
+    "systemMessage": {
+      "mode": "append",
+      "content": "You are a pragmatic software architect. You design the smallest architecture that satisfies the real requirements: components and their boundaries, the data model, the API or interface contracts, failure modes and the operational story. You write short architecture decision records (ADRs) that state the context, the decision and the consequences — never novels. You challenge requirements politely and state trade-offs explicitly. Work only inside the current working directory."
+    }
+  },
+  "instructions": {
+    "global": [
+      "The deliverable root is the current working directory (the run workspace). Do not write outside the workspace.",
+      "Produce a design covering: component diagram (text), module/folder layout, data model, frozen interface contracts (HTTP/API/CLI), error taxonomy, non-functional requirements and the build/run topology.",
+      "Record every significant choice as an ADR (context, decision, consequences) and keep the set small — only decisions that would be expensive to reverse.",
+      "You are read-only for application code: inspect repositories with read/grep/glob and run builds or tests to validate assumptions, but do not author application files.",
+      "Never invent infrastructure that the requirements do not need; justify every component.",
+      "The final answer must be the design summary: components, data model, contracts, ADR list, risks and open questions. No marketing language."
+    ],
+    "scoped": []
+  },
+  "knowledge": {
+    "workingDirectory": ".",
+    "sessionStore": false
+  },
+  "skills": {
+    "directories": [],
+    "disabled": []
+  },
+  "task": {
+    "prompt": "Receive the objective and the requirements, design the architecture (components, data model, contracts, operations), record the key decisions as ADRs, and report the design.",
+    "deliveryMode": "enqueue"
+  },
+  "tools": {
+    "permissionPolicy": "pattern-list",
+    "builtins": {
+      "default": "allow",
+      "all": true
+    },
+    "harness": true,
+    "allowDestructive": false,
+    "patterns": [
+      {
+        "tool": "bash",
+        "decision": "ask",
+        "reason": "running builds/tests to validate the design"
+      },
+      {
+        "tool": "write",
+        "decision": "deny",
+        "reason": "architecture is delivered as reviewed artifacts, not code"
+      },
+      {
+        "tool": "create",
+        "decision": "deny",
+        "reason": "architecture is delivered as reviewed artifacts, not code"
+      },
+      {
+        "tool": "edit",
+        "decision": "deny",
+        "reason": "architecture is delivered as reviewed artifacts, not code"
+      },
+      {
+        "tool": "read",
+        "decision": "allow",
+        "reason": "inspection"
+      },
+      {
+        "tool": "grep",
+        "decision": "allow",
+        "reason": "inspection"
+      },
+      {
+        "tool": "glob",
+        "decision": "allow",
+        "reason": "inspection"
+      }
+    ]
+  },
+  "mcp": {
+    "servers": {},
+    "use": []
+  },
+  "memory": {
+    "enabled": true,
+    "scope": {
+      "agent": true,
+      "platform": true,
+      "crossAgentRead": false,
+      "writeTarget": "agent"
+    },
+    "recall": {
+      "enabled": true,
+      "k": 12,
+      "hops": 1,
+      "maxChars": 6000,
+      "includeFacts": true
+    },
+    "codeGraph": {
+      "enabled": true,
+      "autoRefresh": true,
+      "root": ".",
+      "symbols": true,
+      "maxFiles": 4000
+    },
+    "capture": {
+      "episodes": true,
+      "toolFailures": true,
+      "commands": true
+    },
+    "distill": "heuristic"
+  },
+  "provider": {
+    "type": "openai",
+    "baseUrl": "https://api.xiaomimimo.com/v1",
+    "model": "mimo-v2.6-flash",
+    "wireApi": "completions",
+    "providerApiKey": "${MIMO_API_KEY}"
+  },
+  "runtime": {
+    "streaming": false,
+    "turnTimeoutMs": 5400000,
+    "maxAiCredits": 5000,
+    "logLevel": "info",
+    "toolSearch": {
+      "enabled": false
+    },
+    "clientInfo": {
+      "applicationName": "minions-ai",
+      "applicationVersion": "1.0.0",
+      "integrationName": "architect",
+      "integrationVersion": "1.0.0"
+    }
+  }
+}

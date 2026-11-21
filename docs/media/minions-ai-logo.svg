@@ -1,0 +1,107 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="300" viewBox="0 0 980 300" role="img" aria-labelledby="title desc">
+  <title id="title">Minions-ai</title>
+  <desc id="desc">Three original capsule-shaped agent minions connected by workflow lines beside the wordmark MINIONS·AI.</desc>
+  <defs>
+    <linearGradient id="plaque" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0b1020"/>
+      <stop offset="0.55" stop-color="#111a33"/>
+      <stop offset="1" stop-color="#0a1424"/>
+    </linearGradient>
+    <linearGradient id="yellow" x1="0" y1="0" x2="0.9" y2="1">
+      <stop offset="0" stop-color="#ffe27a"/>
+      <stop offset="1" stop-color="#f4b942"/>
+    </linearGradient>
+    <linearGradient id="mint" x1="0" y1="0" x2="0.9" y2="1">
+      <stop offset="0" stop-color="#8ff0d0"/>
+      <stop offset="1" stop-color="#35c6a1"/>
+    </linearGradient>
+    <linearGradient id="violet" x1="0" y1="0" x2="0.9" y2="1">
+      <stop offset="0" stop-color="#c9b2ff"/>
+      <stop offset="1" stop-color="#8b6cf0"/>
+    </linearGradient>
+    <linearGradient id="ink" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#cfe0ff"/>
+    </linearGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="5" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <pattern id="grid" width="28" height="28" patternUnits="userSpaceOnUse">
+      <path d="M 28 0 L 0 0 0 28" fill="none" stroke="#6f8fbe" stroke-opacity="0.09" stroke-width="1"/>
+    </pattern>
+  </defs>
+
+  <rect x="4" y="4" width="972" height="292" rx="34" fill="url(#plaque)" stroke="#223352" stroke-width="2"/>
+  <rect x="4" y="4" width="972" height="292" rx="34" fill="url(#grid)"/>
+
+  <!-- workflow rails behind the crew -->
+  <g fill="none" stroke="#41608f" stroke-opacity="0.55" stroke-width="2">
+    <path d="M66 214 H 344"/>
+    <path d="M112 62 V 96"/>
+    <path d="M226 62 V 96"/>
+    <path d="M340 62 V 96"/>
+  </g>
+  <g fill="#75e6c4" filter="url(#glow)">
+    <circle cx="66" cy="214" r="5"/>
+    <circle cx="190" cy="214" r="5"/>
+    <circle cx="344" cy="214" r="5"/>
+  </g>
+
+  <!-- minion 1 -->
+  <g transform="translate(112 96)">
+    <rect x="-46" y="12" width="92" height="112" rx="44" fill="url(#yellow)"/>
+    <rect x="-34" y="-30" width="68" height="82" rx="34" fill="url(#yellow)"/>
+    <rect x="-17" y="-38" width="34" height="12" rx="6" fill="#28324b"/>
+    <rect x="-28" y="-9" width="56" height="30" rx="15" fill="#24304a"/>
+    <rect x="-23" y="-4" width="46" height="20" rx="10" fill="#d9f2ff"/>
+    <circle cx="-7" cy="6" r="5" fill="#17233a"/>
+    <circle cx="9" cy="6" r="5" fill="#17233a"/>
+    <path d="M-9 15 Q0 21 9 15" fill="none" stroke="#7a5216" stroke-width="2.5" stroke-linecap="round"/>
+    <rect x="-34" y="38" width="68" height="20" rx="8" fill="#24304a" opacity="0.92"/>
+    <path d="M-45 58 q-12 12 -4 26" fill="none" stroke="#e0a52e" stroke-width="4" stroke-linecap="round"/>
+    <path d="M45 58 q12 12 4 26" fill="none" stroke="#e0a52e" stroke-width="4" stroke-linecap="round"/>
+  </g>
+
+  <!-- minion 2 -->
+  <g transform="translate(226 96)">
+    <rect x="-46" y="12" width="92" height="112" rx="44" fill="url(#mint)"/>
+    <rect x="-34" y="-30" width="68" height="82" rx="34" fill="url(#mint)"/>
+    <rect x="-17" y="-38" width="34" height="12" rx="6" fill="#1e4250"/>
+    <rect x="-28" y="-9" width="56" height="30" rx="15" fill="#173844"/>
+    <rect x="-23" y="-4" width="46" height="20" rx="10" fill="#e7fff8"/>
+    <circle cx="-7" cy="6" r="5" fill="#12332c"/>
+    <circle cx="9" cy="6" r="5" fill="#12332c"/>
+    <path d="M-9 15 Q0 20 9 15" fill="none" stroke="#146b5a" stroke-width="2.5" stroke-linecap="round"/>
+    <rect x="-34" y="38" width="68" height="20" rx="8" fill="#173844" opacity="0.92"/>
+    <path d="M-45 58 q-12 12 -4 26" fill="none" stroke="#27a889" stroke-width="4" stroke-linecap="round"/>
+    <path d="M45 58 q12 12 4 26" fill="none" stroke="#27a889" stroke-width="4" stroke-linecap="round"/>
+  </g>
+
+  <!-- minion 3 -->
+  <g transform="translate(340 96)">
+    <rect x="-46" y="12" width="92" height="112" rx="44" fill="url(#violet)"/>
+    <rect x="-34" y="-30" width="68" height="82" rx="34" fill="url(#violet)"/>
+    <rect x="-17" y="-38" width="34" height="12" rx="6" fill="#322a52"/>
+    <rect x="-28" y="-9" width="56" height="30" rx="15" fill="#302653"/>
+    <rect x="-23" y="-4" width="46" height="20" rx="10" fill="#f5f0ff"/>
+    <circle cx="-7" cy="6" r="5" fill="#261d44"/>
+    <circle cx="9" cy="6" r="5" fill="#261d44"/>
+    <path d="M-9 15 Q0 21 9 15" fill="none" stroke="#5e429e" stroke-width="2.5" stroke-linecap="round"/>
+    <rect x="-34" y="38" width="68" height="20" rx="8" fill="#302653" opacity="0.92"/>
+    <path d="M-45 58 q-12 12 -4 26" fill="none" stroke="#7257c8" stroke-width="4" stroke-linecap="round"/>
+    <path d="M45 58 q12 12 4 26" fill="none" stroke="#7257c8" stroke-width="4" stroke-linecap="round"/>
+  </g>
+
+  <!-- wordmark -->
+  <g transform="translate(436 122)">
+    <text x="0" y="0" fill="url(#ink)" font-family="Segoe UI, Inter, ui-sans-serif, system-ui, sans-serif" font-size="66" font-weight="800" letter-spacing="2">MINIONS<tspan fill="#6ee7c8">·</tspan><tspan fill="#9d8cff">AI</tspan></text>
+    <text x="4" y="38" fill="#8ea6c8" font-family="Segoe UI, Inter, ui-sans-serif, system-ui, sans-serif" font-size="17" letter-spacing="3.2">A SOFTWARE FACTORY OF CUSTOM AGENT TEAMS</text>
+    <g transform="translate(4 64)">
+      <rect x="0" y="0" width="118" height="26" rx="13" fill="#16233d" stroke="#2c4266"/>
+      <text x="59" y="17.5" text-anchor="middle" fill="#b8cae6" font-family="Segoe UI, Inter, ui-sans-serif, system-ui, sans-serif" font-size="11" letter-spacing="1.4">UI · API · CLI</text>
+      <rect x="128" y="0" width="158" height="26" rx="13" fill="#16233d" stroke="#2c4266"/>
+      <text x="207" y="17.5" text-anchor="middle" fill="#b8cae6" font-family="Segoe UI, Inter, ui-sans-serif, system-ui, sans-serif" font-size="11" letter-spacing="1.4">SELF-IMPROVING BY DESIGN</text>
+    </g>
+  </g>
+</svg>

@@ -1,0 +1,104 @@
+{
+  "name": "minions-assembler",
+  "version": "1.0.0",
+  "description": "Minions-ai — a fully configurable software factory of custom AI agent teams. One self-contained executable per OS with a React cockpit, REST API, CLI and A2A, SQLite audit, live progress and self-improving memory.",
+  "author": "Minions-ai contributors",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/siddharth-mishra-28/minions-ai.git"
+  },
+  "homepage": "https://github.com/siddharth-mishra-28/minions-ai#readme",
+  "bugs": {
+    "url": "https://github.com/siddharth-mishra-28/minions-ai/issues"
+  },
+  "type": "module",
+  "bin": {
+    "minions-ai": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && npm run build:web",
+    "build:web": "npm --prefix web ci --no-audit --no-fund && npm --prefix web run build",
+    "build:exe": "node scripts/build-exe.mjs",
+    "build:exe:win": "node scripts/build-exe.mjs --target win-x64",
+    "build:exe:mac": "node scripts/build-exe.mjs --target mac-arm64",
+    "build:exe:linux": "node scripts/build-exe.mjs --target linux-x64",
+    "build:site": "node scripts/build-site.mjs",
+    "dev:web": "npm --prefix web run dev",
+    "dev": "tsx src/cli.ts",
+    "start": "node dist/cli.js",
+    "serve": "node dist/cli.js serve",
+    "dev:serve": "tsx src/cli.ts serve",
+    "init": "node dist/cli.js init",
+    "reset": "node dist/cli.js reset",
+    "postinstall": "node scripts/postinstall.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "typecheck:web": "npm --prefix web run typecheck",
+    "test": "vitest run",
+    "test:web": "npm --prefix web test",
+    "verify": "npm run typecheck && npm run typecheck:web && npm test && npm run test:web",
+    "prepack": "npm run build",
+    "prepublishOnly": "npm run verify"
+  },
+  "files": [
+    "dist",
+    "scripts/postinstall.mjs",
+    "examples/*.agent.json",
+    "examples/*.agent-system.json",
+    "docs/UAT.md",
+    "docs/TEAMS-GUIDE.md",
+    "docs/A2A.md",
+    "docs/EXECUTABLE.md",
+    "docs/CLI.md",
+    "docs/API.md",
+    "docs/media/*.gif",
+    "docs/media/*.png",
+    "docs/media/*.svg",
+    "SECURITY.md",
+    "README.md",
+    "LICENSE"
+  ],
+  "dependencies": {
+    "@fastify/static": "^10.1.7",
+    "@fastify/swagger": "^9.4.2",
+    "@fastify/swagger-ui": "^5.2.0",
+    "@github/copilot-sdk": "^1.0.19",
+    "ajv": "^8.17.1",
+    "better-sqlite3": "^13.0.3",
+    "commander": "^12.1.0",
+    "dotenv": "^16.4.5",
+    "fastify": "^5.12.5",
+    "fflate": "^0.8.2"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^22.7.0",
+    "@yao-pkg/pkg": "^6.21.0",
+    "bytenode": "^2.1.0",
+    "esbuild": "^0.25.0",
+    "vitepress": "^1.6.4",
+    "playwright-core": "^1.64.1",
+    "tsx": "^4.19.1",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.5"
+  },
+  "engines": {
+    "node": ">=22.12",
+    "npm": ">=10"
+  },
+  "keywords": [
+    "agents",
+    "copilot",
+    "ai",
+    "cli",
+    "agent-platform",
+    "agent-teams",
+    "a2a",
+    "workflow",
+    "sqlite",
+    "code-graph"
+  ],
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  }
+}

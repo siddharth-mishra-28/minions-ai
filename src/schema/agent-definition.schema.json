@@ -1,0 +1,493 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://minions-assembler/schema/agent-definition-1.0.json",
+  "title": "AgentDefinition v1.0",
+  "description": "Single source of truth for a custom GitHub Copilot agent. Maps to Copilot SDK createSession/send options.",
+  "type": "object",
+  "required": ["schemaVersion", "metadata", "provider"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": { "type": "string", "const": "1.0" },
+    "metadata": {
+      "type": "object",
+      "required": ["name", "version"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "minLength": 1 },
+        "description": { "type": "string" },
+        "color": {
+          "description": "Identity color for chat UI (agent chat bubbles). Optional hex; when absent a deterministic palette color is derived from the agent id.",
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}$"
+        },
+        "tags": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "persona": {
+      "description": "Session system prompt. SDK has no separate persona field; this maps to systemMessage. Optional: omit systemMessage entirely to run on the SDK-managed default Copilot CLI prompt only.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "useCopilotDefaultPrompt": {
+          "description": "Whether the agent keeps the SDK-managed default Copilot CLI system prompt (preamble, identity, tone, tool_instructions, safetyâ€¦). Default true. append/customize keep it; replace drops it (and its guardrails).",
+          "type": "boolean",
+          "default": true
+        },
+        "systemMessage": {
+          "type": "object",
+          "additionalProperties": false,
+          "allOf": [
+            { "if": { "required": ["mode"], "properties": { "mode": { "const": "replace" } } }, "then": { "required": ["content"], "properties": { "content": {} } } },
+            { "anyOf": [ { "required": ["content"], "properties": { "content": {} } }, { "required": ["sections"], "properties": { "sections": {} } } ] }
+          ],
+          "properties": {
+            "mode": { "type": "string", "enum": ["append", "replace", "customize"], "default": "append" },
+            "content": { "type": "string", "minLength": 1 },
+            "acknowledgeReplaceRisks": { "type": "boolean" },
+            "sections": {
+              "description": "Per-section overrides for mode=customize. Keys are the SYSTEM_MESSAGE_SECTIONS ids of the installed @github/copilot-sdk (GET /api/persona/default-system-prompt lists them and shows the default prompt they belong to).",
+              "type": "object",
+              "additionalProperties": false,
+              "patternProperties": {
+                "^(preamble|identity|tone|tool_efficiency|environment_context|code_change_rules|guidelines|safety|tool_instructions|custom_instructions|runtime_instructions|last_instructions)$": {
+                  "type": "object",
+                  "required": ["action"],
+                  "additionalProperties": false,
+                  "properties": {
+                    "action": { "type": "string", "enum": ["replace", "remove", "append", "prepend", "preserve"] },
+                    "content": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "instructions": {
+      "description": "Repo guidance. Explicitly injected (SDK discovery not guaranteed).",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "global": { "type": "array", "items": { "type": "string" } },
+        "scoped": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["applyTo", "body"],
+            "additionalProperties": false,
+            "properties": {
+              "applyTo": { "type": "string" },
+              "body": { "type": "string" }
+            }
+          }
+        },
+        "agentsMdPaths": { "type": "array", "items": { "type": "string" } },
+        "refreshDiscoveryCache": { "type": "boolean", "default": false },
+        "directories": {
+          "description": "SDK instructionDirectories: folders scanned for *.instructions.md files with frontmatter (side-by-side with agentsMdPaths).",
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "knowledge": {
+      "description": "Emulated knowledge base (SDK has no knowledgeBases field).",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "workingDirectory": { "type": "string" },
+        "additionalDirectories": { "type": "array", "items": { "type": "string" } },
+        "attachments": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["type"],
+            "additionalProperties": false,
+            "properties": {
+              "type": { "type": "string", "enum": ["file", "directory", "blob"] },
+              "path": { "type": "string" },
+              "data": { "type": "string" },
+              "mimeType": { "type": "string" },
+              "displayName": { "type": "string" }
+            }
+          }
+        },
+        "sessionStore": {
+          "description": "Cross-session store: when unset, runtime defaults apply in copilot-cli mode and defaults to disabled in empty mode.",
+          "type": "boolean"
+        },
+        "maxAttachmentBytes": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "agents": {
+      "description": "Inline customAgents (specialist sub-agents).",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "prompt"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "prompt": { "type": "string", "minLength": 1 },
+          "displayName": { "type": "string" },
+          "description": { "type": "string" },
+          "tools": {
+            "type": ["array", "null"],
+            "items": { "type": "string" },
+            "description": "Tool allowlist for this sub-agent. Coding-harness tools (bash, mkdir, write, create) are injected automatically unless tools.harness is false."
+          },
+          "mcpServers": { "type": "object" },
+          "infer": { "type": "boolean" },
+          "skills": { "type": "array", "items": { "type": "string" } },
+          "model": { "type": "string" },
+          "reasoningEffort": { "type": "string" }
+        }
+      }
+    },
+    "defaultAgent": { "type": "string" },
+    "skills": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "directories": { "type": "array", "items": { "type": "string" } },
+        "disabled": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "task": {
+      "description": "User prompt / task sent via send/sendAndWait.",
+      "type": "object",
+      "required": ["prompt"],
+      "additionalProperties": false,
+      "properties": {
+        "prompt": { "type": "string", "minLength": 1 },
+        "deliveryMode": { "type": "string", "enum": ["enqueue", "immediate"], "default": "enqueue" },
+        "attachments": { "type": "array" }
+      }
+    },
+    "tools": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "custom": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "description", "parametersSchema"],
+            "additionalProperties": false,
+            "properties": {
+              "name": { "type": "string" },
+              "description": { "type": "string" },
+              "parametersSchema": { "type": "object" },
+              "skipPermission": { "type": "boolean" },
+              "defer": { "description": "SDK tool deferral: 'never' keeps the tool visible to the model (default); 'auto' lets tool search defer it.", "type": "string", "enum": ["auto", "never"], "default": "never" },
+              "overridesBuiltInTool": { "description": "Required intent marker to replace a same-named built-in tool.", "type": "boolean" },
+              "isTerminal": { "description": "Marks the tool as terminal-shaped for the runtime.", "type": "boolean" },
+              "namespace": { "type": "string" },
+              "metadata": { "type": "object" }
+            }
+          }
+        },
+        "available": { "type": "array", "items": { "type": "string" } },
+        "excluded": { "type": "array", "items": { "type": "string" } },
+        "defaultAgentExcluded": {
+          "description": "SDK defaultAgent.excludedTools: tools hidden from the default/main agent only (still available to custom agents that include them).",
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "harness": {
+          "description": "Inject coding-harness tools (bash, mkdir, write) and auto-create parent directories for create/write/edit. Default true.",
+          "type": "boolean",
+          "default": true
+        },
+        "permissionPolicy": { "type": "string", "enum": ["deny-all", "approve-all-ci-only", "pattern-list"], "default": "deny-all" },
+        "builtins": {
+          "description": "Built-in tool availability + per-tool decisions. default: posture for any tool without a perTool entry (built-in, MCP and custom); all: select-all toggle; perTool: name (bare or source-qualified builtin:/mcp:/custom:) â†’ allow|ask|deny. 'ask' resolves as an audited deny in headless runs.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "default": { "type": "string", "enum": ["allow", "ask", "deny"], "default": "allow" },
+            "all": { "type": "boolean", "default": true },
+            "perTool": {
+              "type": "object",
+              "additionalProperties": { "type": "string", "enum": ["allow", "ask", "deny"] }
+            }
+          }
+        },
+        "allowDestructive": {
+          "description": "Allow destructive update/delete operations (rm -rf, forced pushes, DROPâ€¦), process-kill commands (taskkill/pkill/killall/kill/Stop-Process) and destructive-flagged MCP tool calls. Default false.",
+          "type": "boolean",
+          "default": false
+        },
+        "patterns": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["tool", "decision"],
+            "additionalProperties": false,
+            "properties": {
+              "tool": { "type": "string" },
+              "decision": { "type": "string", "enum": ["allow", "deny", "ask"] },
+              "reason": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "mcp": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "servers": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": ["type"],
+            "properties": {
+              "type": { "type": "string", "enum": ["local", "stdio", "http", "sse"] },
+              "command": { "type": "string" },
+              "args": { "type": "array", "items": { "type": "string" } },
+              "env": { "type": "object", "additionalProperties": { "type": "string" } },
+              "cwd": { "type": "string" },
+              "url": { "type": "string" },
+              "headers": { "type": "object", "additionalProperties": { "type": "string" } },
+              "tools": { "type": "array", "items": { "type": "string" } },
+              "timeoutMs": { "type": "integer", "minimum": 1 },
+              "workingDirectory": { "description": "SDK canonical alias of cwd for local/stdio servers.", "type": "string" },
+              "timeout": { "description": "SDK canonical alias of timeoutMs.", "type": "integer", "minimum": 1 },
+              "authType": {
+                "description": "Host-side auth method for registry/probe/OAuth flows: 'none' | 'headers' (static Authorization) | 'env' (stdio credentials) | 'oauth' (browser PKCE flow). Auto-derived from the config shape when omitted.",
+                "type": "string",
+                "enum": ["none", "headers", "env", "oauth"]
+              },
+              "oauthClientId": { "description": "Remote-server OAuth (SDK pass-through): pre-registered client id for runtime-managed OAuth.", "type": "string" },
+              "oauthScopes": { "type": "array", "items": { "type": "string" } },
+              "oauthPublicClient": { "type": "boolean" },
+              "oauthGrantType": { "type": "string" }
+            }
+          }
+        },
+        "disabled": { "type": "array", "items": { "type": "string" } },
+        "timeoutDefaultMs": { "type": "integer", "minimum": 1 },
+        "use": {
+          "description": "References to servers in the MCP registry (POST /api/mcp): a name string or {name, allow, deny, disabled}.",
+          "type": "array",
+          "items": {
+            "anyOf": [
+              { "type": "string" },
+              {
+                "type": "object",
+                "required": ["name"],
+                "additionalProperties": false,
+                "properties": {
+                  "name": { "type": "string", "minLength": 1 },
+                  "allow": { "type": "array", "items": { "type": "string" } },
+                  "deny": { "type": "array", "items": { "type": "string" } },
+                  "disabled": { "type": "boolean" }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    "memory": {
+      "description": "Long-term memory: agent-private + shared platform graph (files/symbols/imports, facts, lessons learned from failures). Optional — omitted values resolve from the platform defaults row in the database, then code defaults. Retrieval is lexical + graph by default; vector search only activates when an embedding endpoint is configured.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean", "default": true },
+        "recall": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "k": { "type": "integer", "minimum": 1, "maximum": 50 },
+            "hops": { "description": "Graph expansion depth (0 = seeds only).", "type": "integer", "minimum": 0, "maximum": 3 },
+            "kinds": { "type": "array", "items": { "type": "string", "enum": ["File", "Symbol", "Package", "Fact", "Lesson", "Episode", "Preference", "Task"] } },
+            "maxChars": { "description": "Character budget for the injected memory block (≈ tokens × 4).", "type": "integer", "minimum": 200, "maximum": 20000 },
+            "includeFacts": { "description": "Render edge statements (e.g. \"a imports b\") alongside nodes.", "type": "boolean" }
+          }
+        },
+        "scope": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "agent": { "description": "Read this agent's own dataset (agent:<name>).", "type": "boolean" },
+            "platform": { "description": "Read the shared platform dataset.", "type": "boolean" },
+            "crossAgentRead": { "description": "Read other agents' datasets too (off by default).", "type": "boolean" },
+            "writeTarget": { "description": "Where memory_note/memory_lesson write: the agent's dataset or the shared platform one.", "type": "string", "enum": ["agent", "platform"] }
+          }
+        },
+        "retrieval": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "mode": { "type": "string", "enum": ["lexical", "vector", "hybrid"], "default": "lexical" },
+            "embedding": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "provider": { "type": "string", "enum": ["none", "openai", "ollama", "custom"], "default": "none" },
+                "model": { "type": "string" },
+                "baseUrl": { "description": "OpenAI-compatible base URL (e.g. http://localhost:11434/v1 for Ollama).", "type": "string" },
+                "apiKeyRef": { "description": "${ENV_VAR} or enc:v1 token reference — never a literal secret.", "type": "string" },
+                "batchSize": { "type": "integer", "minimum": 1, "maximum": 256 },
+                "dimensions": { "type": "integer", "minimum": 1, "maximum": 8192 }
+              }
+            }
+          }
+        },
+        "codeGraph": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "dataset": { "description": "Where the code graph lives: the shared platform dataset (default, one copy for all agents) or this agent's private dataset.", "type": "string", "enum": ["platform", "agent"] },
+            "root": { "description": "Root to index (relative to the workspace, or absolute).", "type": "string" },
+            "include": { "type": "array", "items": { "type": "string" } },
+            "exclude": { "type": "array", "items": { "type": "string" } },
+            "maxFiles": { "type": "integer", "minimum": 1, "maximum": 50000 },
+            "symbols": { "type": "boolean" },
+            "autoRefresh": { "description": "Incrementally refresh the index at the start of each run/turn.", "type": "boolean" }
+          }
+        },
+        "capture": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "episodes": { "type": "boolean" },
+            "toolFailures": { "type": "boolean" },
+            "commands": { "type": "boolean" }
+          }
+        },
+        "distill": { "type": "string", "enum": ["heuristic", "llm", "off"], "default": "heuristic" },
+        "feedbackInfluence": { "description": "How strongly past outcomes reorder recall (0 = ignore feedback).", "type": "number", "minimum": 0, "maximum": 1 },
+        "lessons": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "autoPromoteAcrossAgents": { "description": "Promote a lesson to the shared platform dataset once N distinct agents learned it (0 = off).", "type": "integer", "minimum": 0, "maximum": 50 }
+          }
+        }
+      }
+    },
+    "provider": {
+      "description": "BYOK provider. `providerApiKey` is the fixed credential attribute: an `enc:v1:` token (AES-256-GCM at rest), a `${ENV_VAR}` reference, or a literal key that is sealed to a token on save. Legacy `credentialEnv` is still accepted.",
+      "type": "object",
+      "required": ["model"],
+      "anyOf": [ { "required": ["type", "baseUrl", "providerApiKey"], "properties": { "type": {}, "baseUrl": {}, "providerApiKey": {} } }, { "required": ["providerRef"], "properties": { "providerRef": {} } } ],
+      "additionalProperties": false,
+      "properties": {
+        "providerRef": { "description": "Id of a provider configured in Settings. When set, type/baseUrl/credential are resolved from it at run time and any inline values act only as a snapshot.", "type": "string", "minLength": 1 },
+        "type": { "type": "string", "enum": ["openai", "azure", "anthropic"] },
+        "baseUrl": { "type": "string", "minLength": 1 },
+        "model": { "type": "string", "minLength": 1 },
+        "wireApi": { "type": "string", "enum": ["completions", "responses"] },
+        "providerApiKey": { "type": "string", "minLength": 1 },
+        "credentialEnv": { "type": "string", "minLength": 1 },
+        "azureApiVersion": { "type": "string" }
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "streaming": { "type": "boolean" },
+        "sessionId": { "type": "string" },
+        "resume": { "type": "boolean" },
+        "idleTimeoutSecs": { "type": "integer", "minimum": 1 },
+        "toolSearch": {
+          "description": "Tool-search override: enabled=false preloads tools instead of deferring them behind tool_search_tool; deferThreshold sets the defer limit.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean", "default": false },
+            "deferThreshold": { "type": "integer", "minimum": 1 }
+          }
+        },
+        "excludedBuiltinAgents": {
+          "description": "Names of built-in runtime agents to hide from discovery.",
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "includedBuiltinSkills": {
+          "description": "Runtime-bundled skills to include; omit to use runtime defaults (built-ins are opt-in only in empty mode).",
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "turnTimeoutMs": {
+          "description": "Per-turn budget for sendAndWait in ms. Resolution: API body > this field > RUN_TURN_TIMEOUT_MS env > default 2700000 (45 min).",
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 21600000
+        },
+        "maxAiCredits": { "type": "number" },
+        "logLevel": { "type": "string", "enum": ["error", "warning", "info", "debug"] },
+        "autopilot": {
+          "description": "Session autopilot (experimental in the SDK runtime): a toggle, or { continuationEnabled, maxContinues } options.",
+          "oneOf": [
+            { "type": "boolean" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "continuationEnabled": { "type": "boolean" },
+                "maxContinues": { "type": "integer", "minimum": 0 }
+              }
+            }
+          ]
+        },
+        "reasoningEffort": {
+          "description": "Session-level reasoning effort for supported models (per-sub-agent overrides live in agents[].reasoningEffort).",
+          "type": "string",
+          "enum": ["low", "medium", "high", "xhigh", "max"]
+        },
+        "capi": {
+          "description": "Copilot API options (model: 'auto' routing preference).",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "autoTier": { "type": "string", "enum": ["efficiency", "balance", "intelligence", "fast"] }
+          }
+        },
+        "modelCapabilities": {
+          "description": "Capabilities advertised to the runtime through the host's model listing (replaces hardcoded caps).",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "vision": { "type": "boolean" },
+            "reasoningEffort": { "type": "boolean" },
+            "maxContextWindowTokens": { "type": "integer", "minimum": 1 }
+          }
+        },
+        "trustWorkingDirectory": {
+          "description": "SDK trustWorkingDirectory (create-time only; not available on resume).",
+          "type": "string",
+          "enum": ["session", "user"]
+        },
+        "clientInfo": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "applicationName": { "type": "string" },
+            "applicationVersion": { "type": "string" },
+            "integrationName": { "type": "string" },
+            "integrationVersion": { "type": "string" }
+          }
+        }
+      }
+    },
+    "fleet": {
+      "description": "Fleet mode: parallel sub-agent orchestration for concurrent agents (uses Copilot SDK session.rpc.fleet.start).",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean", "default": false },
+        "prompt": { "type": "string" },
+        "maxConcurrentWorkers": { "type": "integer", "minimum": 1, "maximum": 50, "default": 5 }
+      }
+    }
+  }
+}

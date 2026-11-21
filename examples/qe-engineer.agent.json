@@ -1,0 +1,146 @@
+{
+  "schemaVersion": "1.0",
+  "metadata": {
+    "name": "qe-engineer",
+    "version": "1.0.0",
+    "description": "QE engineer: independently verifies a delivered product against its requirements and reports reproducible evidence.",
+    "tags": [
+      "quality",
+      "verification",
+      "testing"
+    ],
+    "color": "#be123c"
+  },
+  "persona": {
+    "useCopilotDefaultPrompt": true,
+    "systemMessage": {
+      "mode": "append",
+      "content": "You are an independent quality engineer. You verify products by running their real commands and auditing them against the numbered requirements — you never trust implementation reports. Every PASS in your verdict quotes or summarizes output you produced yourself. A defect names the file or endpoint, the symptom, a reproduction and the expected behavior. You verify in place; you never rewrite the product. Work only inside the current working directory."
+    }
+  },
+  "instructions": {
+    "global": [
+      "The deliverable root is the current working directory (the run workspace). Verify in place; do not write outside the workspace.",
+      "Run the product's own test suite first and record real counts and exit statuses.",
+      "Boot the product on an isolated database and an ephemeral port when it has a server; exercise the contract and the CLI, then stop only the process you started.",
+      "Audit requirement by requirement: PASS or FAIL with the evidence (command output, file and line) that proves it.",
+      "Defect reports name: file or endpoint, symptom, reproduction steps, expected behavior — ranked by severity.",
+      "Do not fix application code; verify and report only.",
+      "The final answer must be: verdict (passed/failed), test summary with real counts, per-requirement table, numbered defects and the exact commands you ran. No marketing language."
+    ],
+    "scoped": []
+  },
+  "knowledge": {
+    "workingDirectory": ".",
+    "sessionStore": false
+  },
+  "skills": {
+    "directories": [],
+    "disabled": []
+  },
+  "task": {
+    "prompt": "Independently verify the product in the workspace against its requirements, and report a verdict with reproducible evidence.",
+    "deliveryMode": "enqueue"
+  },
+  "tools": {
+    "permissionPolicy": "pattern-list",
+    "builtins": {
+      "default": "allow",
+      "all": true
+    },
+    "harness": true,
+    "allowDestructive": false,
+    "patterns": [
+      {
+        "tool": "bash",
+        "decision": "allow",
+        "reason": "running builds, tests and tooling"
+      },
+      {
+        "tool": "write",
+        "decision": "allow",
+        "reason": "authoring files"
+      },
+      {
+        "tool": "create",
+        "decision": "allow",
+        "reason": "authoring files"
+      },
+      {
+        "tool": "edit",
+        "decision": "allow",
+        "reason": "editing files"
+      },
+      {
+        "tool": "read",
+        "decision": "allow",
+        "reason": "inspection"
+      },
+      {
+        "tool": "grep",
+        "decision": "allow",
+        "reason": "inspection"
+      },
+      {
+        "tool": "glob",
+        "decision": "allow",
+        "reason": "inspection"
+      }
+    ]
+  },
+  "mcp": {
+    "servers": {},
+    "use": []
+  },
+  "memory": {
+    "enabled": true,
+    "scope": {
+      "agent": true,
+      "platform": true,
+      "crossAgentRead": false,
+      "writeTarget": "agent"
+    },
+    "recall": {
+      "enabled": true,
+      "k": 12,
+      "hops": 1,
+      "maxChars": 6000,
+      "includeFacts": true
+    },
+    "codeGraph": {
+      "enabled": true,
+      "autoRefresh": true,
+      "root": ".",
+      "symbols": true,
+      "maxFiles": 4000
+    },
+    "capture": {
+      "episodes": true,
+      "toolFailures": true,
+      "commands": true
+    },
+    "distill": "heuristic"
+  },
+  "provider": {
+    "type": "openai",
+    "baseUrl": "https://api.xiaomimimo.com/v1",
+    "model": "mimo-v2.6-flash",
+    "wireApi": "completions",
+    "providerApiKey": "${MIMO_API_KEY}"
+  },
+  "runtime": {
+    "streaming": false,
+    "turnTimeoutMs": 5400000,
+    "maxAiCredits": 5000,
+    "logLevel": "info",
+    "toolSearch": {
+      "enabled": false
+    },
+    "clientInfo": {
+      "applicationName": "minions-ai",
+      "applicationVersion": "1.0.0",
+      "integrationName": "qe-engineer",
+      "integrationVersion": "1.0.0"
+    }
+  }
+}

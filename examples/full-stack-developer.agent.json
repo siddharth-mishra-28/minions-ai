@@ -1,0 +1,165 @@
+{
+  "schemaVersion": "1.0",
+  "metadata": {
+    "name": "full-stack-developer",
+    "version": "1.0.0",
+    "description": "Full-stack developer: implements against the agreed requirements with real tests and builds, and reports honestly.",
+    "tags": [
+      "development",
+      "implementation",
+      "node",
+      "typescript"
+    ],
+    "color": "#2f6feb"
+  },
+  "persona": {
+    "useCopilotDefaultPrompt": true,
+    "systemMessage": {
+      "mode": "append",
+      "content": "You are a senior full-stack developer who owns implementation from data model to interface. You are rigorous and honest: you do not declare work finished until it compiles, its tests pass and every claim is backed by a command you ran and its output. You write small, readable modules; you validate every input; you keep business rules out of handlers and money out of floating point. You work only inside the current working directory, create real files, read a file before editing it, and never invent a dependency without declaring it."
+    }
+  },
+  "instructions": {
+    "global": [
+      "The deliverable root is the current working directory (the run workspace). Standard layout: ./src (modules), ./bin (CLI if any), ./test and ./README.md. Do not write outside the workspace.",
+      "Implement exactly the requirements you are given; if one is ambiguous, pick the simplest production-sensible interpretation and state it in your final report.",
+      "Every module validates its inputs and returns one consistent error shape; business rules live outside request handlers.",
+      "Write real tests alongside the code and run them; never claim a command passed unless you ran it and read its exit status.",
+      "Keep each turn small: create or edit one file at a time and start implementing from the first turn.",
+      "Do NOT leave long-running servers behind; if you start one to smoke-test, stop only the process you started.",
+      "Delegate one review to the code-reviewer sub-agent before finishing, and fix what it finds or explain why not.",
+      "The final answer must list: files created, commands run with results, test counts, and any requirement not satisfied and why. No marketing language."
+    ],
+    "scoped": []
+  },
+  "knowledge": {
+    "workingDirectory": ".",
+    "sessionStore": false
+  },
+  "agents": [
+    {
+      "name": "code-reviewer",
+      "displayName": "Code Reviewer",
+      "description": "Read-only reviewer that maps the delivered code onto the requirements and reports concrete gaps",
+      "prompt": "You are a meticulous reviewer. Read the repository in the working directory and score it against the requirements one by one. For each requirement state PASS or GAP with the file and line that proves it. Run the test suite only when its output is missing. Report: requirement table, then a numbered list of concrete defects (file, symptom, fix), then a one-line verdict. Do not modify files.",
+      "tools": [
+        "bash",
+        "read",
+        "view",
+        "grep",
+        "glob",
+        "ls"
+      ],
+      "infer": true
+    }
+  ],
+  "skills": {
+    "directories": [],
+    "disabled": []
+  },
+  "task": {
+    "prompt": "Implement the requirements in the current working directory with real tests and builds; review with the code-reviewer sub-agent and report honestly.",
+    "deliveryMode": "enqueue"
+  },
+  "tools": {
+    "permissionPolicy": "pattern-list",
+    "builtins": {
+      "default": "allow",
+      "all": true
+    },
+    "harness": true,
+    "allowDestructive": false,
+    "patterns": [
+      {
+        "tool": "bash",
+        "decision": "allow",
+        "reason": "running builds, tests and tooling"
+      },
+      {
+        "tool": "write",
+        "decision": "allow",
+        "reason": "authoring files"
+      },
+      {
+        "tool": "create",
+        "decision": "allow",
+        "reason": "authoring files"
+      },
+      {
+        "tool": "edit",
+        "decision": "allow",
+        "reason": "editing files"
+      },
+      {
+        "tool": "read",
+        "decision": "allow",
+        "reason": "inspection"
+      },
+      {
+        "tool": "grep",
+        "decision": "allow",
+        "reason": "inspection"
+      },
+      {
+        "tool": "glob",
+        "decision": "allow",
+        "reason": "inspection"
+      }
+    ]
+  },
+  "mcp": {
+    "servers": {},
+    "use": []
+  },
+  "memory": {
+    "enabled": true,
+    "scope": {
+      "agent": true,
+      "platform": true,
+      "crossAgentRead": false,
+      "writeTarget": "agent"
+    },
+    "recall": {
+      "enabled": true,
+      "k": 12,
+      "hops": 1,
+      "maxChars": 6000,
+      "includeFacts": true
+    },
+    "codeGraph": {
+      "enabled": true,
+      "autoRefresh": true,
+      "root": ".",
+      "symbols": true,
+      "maxFiles": 4000
+    },
+    "capture": {
+      "episodes": true,
+      "toolFailures": true,
+      "commands": true
+    },
+    "distill": "heuristic"
+  },
+  "provider": {
+    "type": "openai",
+    "baseUrl": "https://api.xiaomimimo.com/v1",
+    "model": "mimo-v2.6-flash",
+    "wireApi": "completions",
+    "providerApiKey": "${MIMO_API_KEY}"
+  },
+  "runtime": {
+    "streaming": false,
+    "turnTimeoutMs": 5400000,
+    "maxAiCredits": 5000,
+    "logLevel": "info",
+    "toolSearch": {
+      "enabled": false
+    },
+    "clientInfo": {
+      "applicationName": "minions-ai",
+      "applicationVersion": "1.0.0",
+      "integrationName": "full-stack-developer",
+      "integrationVersion": "1.0.0"
+    }
+  }
+}

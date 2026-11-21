@@ -1,0 +1,197 @@
+import Fastify from 'fastify';
+import swagger from '@fastify/swagger';
+import swaggerUi from '@fastify/swagger-ui';
+import { SqliteAdapter } from './store/sqlite.js';
+import { resolveWorkspace, ServerLog } from './core/workspace.js';
+import { PKG } from './core/pkg.js';
+import { RunQueue } from './core/run-queue.js';
+import { registerSystemRoutes } from './http/routes-system.js';
+import { registerAgentRoutes } from './http/routes-agents.js';
+import { registerRunRoutes } from './http/routes-runs.js';
+import { registerMcpRoutes } from './http/routes-mcp.js';
+import { registerChatRoutes } from './http/routes-chat.js';
+import { registerMemoryRoutes } from './http/routes-memory.js';
+import { registerWebApp } from './http/web-static.js';
+import { registerPlatformRoutes } from './http/routes-platform.js';
+import { registerSecurity } from './http/security.js';
+import { PlatformStore } from './store/platform.js';
+import { TeamStore } from './store/teams.js';
+import { TeamHub } from './execution/team/hub.js';
+import { createCopilotExecutor, type MemberExecutor } from './execution/team/executor.js';
+import { TeamEngine } from './execution/team/engine.js';
+import { TeamService } from './systems/service.js';
+import { registerTeamRoutes } from './http/routes-teams.js';
+import { registerA2ARoutes } from './a2a/routes-a2a.js';
+import { resolveMemoryConfig } from './memory/config.js';
+import { createMemoryRuntime } from './memory/runtime.js';
+import type { TeamEvent } from './systems/types.js';
+import { ChatHub } from './execution/chat-hub.js';
+import { ApprovalBroker } from './execution/approvals.js';
+import { ChatEngine } from './execution/chat-engine.js';
+import { RetentionService } from './execution/retention.js';
+import type { McpServerConfig } from './mcp/mcp.js';
+import { dirname, join, resolve } from 'node:path';
+import { readFileSync } from 'node:fs';
+import { ensureAssets } from './core/embedded-assets.js';
+import { defaultDbPath } from './core/install-paths.js';
+import { openMemoryStore } from './memory/sqlite-store.js';
+
+export type { DbAdapter } from './store/adapter.js';
+
+/**
+ * Composition root. Builds the Fastify app, wires cross-cutting concerns (audit hook,
+ * validation-error shaping, Swagger), then registers each route group from its own
+ * clearly-owned module:
+ *
+ *   routes-system.ts    — health, audit logs, OpenAPI doc, provider probes, credentials, metrics
+ *   routes-agents.ts    — agent definitions: CRUD, drafts, export, Elaborate, wizard helpers
+ *   routes-runs.ts      — agent execution (stored id + inline) and run/session audit reads
+ *   routes-mcp.ts       — MCP registry, live probes (+ LLM diagnose/auto-fix), browser OAuth *   routes-chat.ts       — persistent chat threads with registered agents (multi-turn)
+ *
+ * Shared state has one owner: the SQLite adapter lives in `db`, all SDK run
+ * serialization goes through the RunQueue, per-flow state (pending OAuth) is owned by
+ * its route module closure. Data flows: HTTP route module → adapter — nothing else.
+ */
+export async function buildServer(dbPath = defaultDbPath(), opts: { teamExecutor?: MemberExecutor } = {}) {
+  const db = new SqliteAdapter(dbPath);
+  // Long-term memory lives in the SAME database file (own connection, WAL) so the
+  // knowledge graph is queryable next to runs/agents and survives restarts.
+  const memoryStore = openMemoryStore(dbPath);
+  // One SDK session executes at a time (each run spawns a Go child); every run
+  // route chains through the RunQueue in submission order.
+  const runQueue = new RunQueue();
+
+  const workspace = resolveWorkspace(); // server-wide: MINION_WORKSPACE env > cwd (definition override is per-run, applied in the runner)
+  const serverLog = new ServerLog(workspace.root);
+  serverLog.write('info', 'server.start', { db: dbPath, workspace: workspace.root, workspaceSource: workspace.source });
+  const app = Fastify({
+    logger: false,
+    ajv: { customOptions: { strict: false } /* allow example/summary keywords in route schemas */ },
+    // Cap request payloads (definitions are small JSON; transcripts spill to disk not bodies)
+    bodyLimit: 2 * 1024 * 1024,
+    // Long-running work (Elaborate LLM calls, multi-turn agent runs) must NOT have the
+    // socket yanked out from under them. A 30s connectionTimeout was killing every
+    // generation slower than ~30s — that was the residual "Elaborate fails at times" flake.
+    // 0 disables the inactivity kill; per-request budgets are enforced by
+    // AbortSignal.timeout in the elaborate handler and turnTimeoutMs in the runner.
+    connectionTimeout: 0,
+    requestTimeout: 0,
+    keepAliveTimeout: 120_000,
+  });
+  app.addHook('onResponse', (req, reply, done) => {
+    serverLog.write('audit', 'http.request', { method: req.method, url: req.url, statusCode: reply.statusCode, ms: Math.round(reply.elapsedTime) });
+    done();
+  });
+  // Meaningful validation errors: Fastify's default body for schema failures is an opaque "Bad Request"
+  app.setErrorHandler((err: unknown, _req, reply) => {
+    const e = err as { validation?: { instancePath?: string; message?: string }[]; statusCode?: number; message: string };
+    if (e.validation) {
+      const detail = e.validation.map((v) => `${v.instancePath ?? ''} ${v.message ?? ''}`.trim()).join('; ');
+      return reply.code(400).send({ error: `Invalid request body: ${detail}` });
+    }
+    const status = e.statusCode ?? 500;
+    serverLog.write(status >= 500 ? 'error' : 'warn', 'http.error', { status, message: e.message });
+    return reply.code(status).send({ error: e.message });
+  });
+
+  registerSecurity(app);
+  await app.register(swagger, {
+    openapi: {
+      info: {
+        title: 'Minions-ai API',
+        version: PKG.version,
+        description:
+          'Define, run, and audit custom GitHub Copilot agents from versioned JSON definitions.\n\n' +
+          '**Auth:** none (loopback-only by default; front with a proxy + token before shared exposure).\n' +
+          '**Credentials:** `provider.providerApiKey` is the fixed credential attribute. Literal keys are sealed to AES-256-GCM `enc:v1:` tokens before they are stored; `${ENV_VAR}` references resolve at run time. Legacy `credentialEnv` is still accepted.\n' +
+          '**IDs:** agent ids are `name@version`; URL-encode `@` as `%40`.',
+      },
+      tags: [
+        { name: 'system', description: 'Health and status' },
+        { name: 'agents', description: 'Agent definitions: validate, register, list, inspect' },
+        { name: 'runs', description: 'Execute agents and inspect run status, audit events, streams' },
+        { name: 'mcp', description: 'MCP server registry: register, list, probe tools, delete' },
+        { name: 'memory', description: 'Long-term memory: code graph, learned lessons, platform config, curation' },
+        { name: 'teams', description: 'Agent teams: definitions, immutable versions, orchestrated runs, team conversations' },
+        { name: 'a2a', description: 'Agent2Agent: discovery cards, JSON-RPC message/send & tasks, streaming' },
+      ],
+    },
+  });
+  let swaggerRoot: string | undefined;
+  try { swaggerRoot = ensureAssets('swagger'); } catch { /* optional docs assets */ }
+  await app.register(swaggerUi, {
+    routePrefix: '/docs',
+    ...(swaggerRoot ? { baseDir: swaggerRoot, logo: { type: 'image/svg+xml', content: readFileSync(join(swaggerRoot, 'logo.svg')) } } : {}),
+  });
+
+  // The memory store is a second connection to the same file; closing the app
+  // must release it or tests/listeners keep the handle alive. The main adapter
+  // must be closed too: leaking it left better-sqlite3 statements to be finalized
+  // after a Vitest worker environment was destroyed, which aborts the process
+  // (`RemoveEnvironmentCleanupHook: Assertion failed: (env) != nullptr`).
+  app.addHook('onClose', async () => {
+    try { memoryStore.close(); } catch { /* already closed */ }
+    try { db.close(); } catch { /* already closed */ }
+  });
+
+  await registerSystemRoutes(app, { db, dbPath, workspace, serverLog, app });
+  const mcpRegistry = (): { registry: Map<string, McpServerConfig>; tools: Map<string, string[]> } => {
+    const registry = new Map<string, McpServerConfig>();
+    const tools = new Map<string, string[]>();
+    for (const row of db.listMcpServers()) {
+      try {
+        registry.set(row.name, JSON.parse((db.getMcpServer(row.name) as { config_json: string }).config_json) as McpServerConfig);
+        const tj = row.tools_json ? JSON.parse(row.tools_json) as { name: string }[] : [];
+        tools.set(row.name, tj.map((t) => t.name));
+      } catch { /* skip malformed rows */ }
+    }
+    return { registry, tools };
+  };
+  const platform = new PlatformStore(db);
+  await registerAgentRoutes(app, { db, platform });
+  await registerRunRoutes(app, { db, runQueue, memoryStore });
+  await registerMcpRoutes(app, { db });
+  const hub = new ChatHub();
+  const broker = new ApprovalBroker(platform, hub);
+  const auditRoot = resolve(join(dirname(resolve(dbPath)), 'audit'));
+  const retention = new RetentionService(platform, { auditRoot, workspaceRoot: workspace.root });
+  // The builtin team designer needs TeamService, which is constructed below with
+  // this engine — hand it over lazily.
+  let teamsService: import('./systems/service.js').TeamService | undefined;
+  const engine = new ChatEngine({ db, platform, hub, broker, workspaceRoot: workspace.root, auditRoot, mcpRegistry, memoryStore, teams: () => teamsService! });
+  await registerPlatformRoutes(app, { platform, broker, retention, db });
+  // Agent teams: the existing agent definitions stay the source of truth; the team
+  // layer orchestrates pinned copies of them as independent Copilot sessions.
+  const teamStore = new TeamStore(db);
+  const teamHub = new TeamHub();
+  const memoryForMember = (input: { definition: import('./core/types.js').AgentDefinition; memberId: string; agentId: string; task: string }) => {
+    const config = resolveMemoryConfig(memoryStore, input.definition);
+    if (!config.enabled) return undefined;
+    return createMemoryRuntime({ store: memoryStore, config, definition: input.definition, agentId: `${input.agentId}#${input.memberId}`, task: input.task });
+  };
+  const teamExecutor = opts.teamExecutor ?? createCopilotExecutor({ db, auditRoot });
+  const teamEngine = new TeamEngine({
+    store: teamStore, executor: teamExecutor, lookup: db, workspaceRoot: workspace.root,
+    onEvent: (runId, event) => teamHub.publish(runId, event as TeamEvent),
+    memoryFor: (input) => memoryForMember(input),
+  });
+  const teams = new TeamService({ db, store: teamStore, engine: teamEngine, workspaceRoot: workspace.root });
+  teamsService = teams;
+  const interrupted = teams.recoverStaleRuns();
+  if (interrupted.length) serverLog.write('warn', 'team.runs.interrupted', { runs: interrupted });
+  await registerTeamRoutes(app, { teams, store: teamStore, hub: teamHub, isActive: (id) => teamEngine.isActive(id) });
+  await registerA2ARoutes(app, { teams, store: teamStore, hub: teamHub, isActive: (id) => teamEngine.isActive(id) });
+  app.addHook('onClose', async () => {
+    for (const runId of teamEngine.activeRunIds()) {
+      try { teamEngine.stop(runId); } catch { /* best-effort */ }
+    }
+  });
+  await registerChatRoutes(app, { db, platform, engine, hub, broker });
+  await registerMemoryRoutes(app, { store: memoryStore });
+  await registerWebApp(app);
+
+  retention.start();
+  app.addHook('onClose', async () => { retention.stop(); });
+
+  return { app, db, platform, hub, broker, engine, retention, memoryStore };
+}

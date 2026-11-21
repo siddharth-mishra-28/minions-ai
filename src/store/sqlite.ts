@@ -1,0 +1,341 @@
+import Database from 'better-sqlite3';
+import { randomUUID } from 'node:crypto';
+import { existsSync, mkdirSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import type { DbAdapter } from './adapter.js';
+import type { RunStatus } from '../core/types.js';
+import { encryptSecret, decryptSecret } from '../core/crypto.js';
+import { defaultDbPath, isPackaged } from '../core/install-paths.js';
+import { ensureAssets } from '../core/embedded-assets.js';
+import { runMigrations } from './migrations.js';
+
+/**
+ * Bootstrap DDL. Additive only: `ensureColumn` evolves old databases forward,
+ * and NOTHING is ever dropped here (the removed workflow feature's DROP
+ * migrations were deleted — legacy tables in old dev DBs are inert and can be
+ * cleared by deleting the db file).
+ */
+/** Run-row projection: excludes the (large, sensitive) definition_json snapshot. */
+const RUN_COLUMNS = 'id,agent_id,session_id,trace_id,status,model,provider_type,task_prompt,definition_hash,created_at,finished_at,error,source,thread_id,project_id,audit_path';
+
+/** Cap for one persisted audit event (events.payload_json). */
+export const EVENT_PAYLOAD_LIMIT = 20000;
+
+/**
+ * Keep `events.payload_json` valid JSON no matter how large the tool output is.
+ * The previous byte-wise slice cut strings mid-token, so JSON.parse (run timeline,
+ * SSE replay) and SQLite's json_extract both failed on big tool results. Oversized
+ * payloads are stored as a self-describing envelope with a bounded preview; the
+ * full event remains in the on-disk events.jsonl transcript.
+ */
+export function clampEventPayload(payloadJson: string): string {
+  if (payloadJson.length <= EVENT_PAYLOAD_LIMIT) return payloadJson;
+  return JSON.stringify({
+    truncated: true,
+    bytes: payloadJson.length,
+    preview: payloadJson.slice(0, EVENT_PAYLOAD_LIMIT - 200),
+  });
+}
+
+export const SCHEMA_SQL = `
+      CREATE TABLE IF NOT EXISTS agents(id TEXT PRIMARY KEY, name TEXT, version TEXT, definition_json TEXT, definition_hash TEXT, created_at TEXT, status TEXT DEFAULT 'published');
+      CREATE TABLE IF NOT EXISTS runs(id TEXT PRIMARY KEY, agent_id TEXT, session_id TEXT, trace_id TEXT UNIQUE, status TEXT, model TEXT, provider_type TEXT, task_prompt TEXT, definition_hash TEXT, definition_json TEXT, created_at TEXT, finished_at TEXT, error TEXT);
+      CREATE TABLE IF NOT EXISTS events(id INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT, seq INTEGER, type TEXT, payload_json TEXT, persisted INTEGER, at TEXT);
+      CREATE TABLE IF NOT EXISTS usage(run_id TEXT PRIMARY KEY, tokens_in INTEGER, tokens_out INTEGER, credits REAL, duration_ms INTEGER, endpoint TEXT, request_id TEXT);      CREATE TABLE IF NOT EXISTS transcripts(run_id TEXT PRIMARY KEY, path TEXT, sha256 TEXT);
+      CREATE TABLE IF NOT EXISTS mcp_servers(name TEXT PRIMARY KEY, config_json TEXT, description TEXT, tools_json TEXT, created_at TEXT);
+      CREATE TABLE IF NOT EXISTS sessions(session_id TEXT PRIMARY KEY, run_id TEXT, agent_id TEXT, trace_id TEXT, status TEXT, summary TEXT, created_at TEXT, updated_at TEXT);
+      CREATE TABLE IF NOT EXISTS credentials(name TEXT PRIMARY KEY, ciphertext TEXT NOT NULL, iv TEXT NOT NULL, tag TEXT NOT NULL, created_at TEXT, updated_at TEXT);
+      CREATE TABLE IF NOT EXISTS chat_threads(id TEXT PRIMARY KEY, title TEXT, agent_id TEXT, session_id TEXT, created_at TEXT, updated_at TEXT);
+      CREATE TABLE IF NOT EXISTS chat_messages(mtid INTEGER PRIMARY KEY AUTOINCREMENT, thread_id TEXT, role TEXT, author TEXT, content TEXT, run_id TEXT, created_at TEXT);`;
+
+export class SqliteAdapter implements DbAdapter {
+  private db: Database.Database;
+  constructor(path = defaultDbPath()) {
+    // Install-time bootstrap: the db always lives inside a folder (data/ by default);
+    // create it for whatever path the caller passes.
+    mkdirSync(dirname(path), { recursive: true });
+    if (isPackaged() && !process.env.MINIONS_SQLITE_NATIVE) {
+      try {
+        const root = ensureAssets('native');
+        process.env.MINIONS_SQLITE_NATIVE = existsSync(join(root, 'better_sqlite3.node')) ? join(root, 'better_sqlite3.node') : root;
+      } catch { /* fall back to bindings */ }
+    }
+    this.db = new Database(path, process.env.MINIONS_SQLITE_NATIVE ? { nativeBinding: process.env.MINIONS_SQLITE_NATIVE } : undefined);
+    // Durability + concurrency: WAL lets readers (UI polling, /api/logs) proceed while a run writes.
+    this.db.pragma('journal_mode = WAL');
+    this.db.pragma('synchronous = NORMAL');
+    this.db.pragma('foreign_keys = ON');
+    this.db.exec(SCHEMA_SQL);
+    // Additive schema evolution for DBs created before these columns existed.
+    // Never drops anything — see SCHEMA_SQL docs.
+    this.ensureColumn('agents', 'status', "TEXT DEFAULT 'published'");
+    this.ensureColumn('runs', 'definition_json', 'TEXT');
+    runMigrations(this.db);
+    // Liveness signal for team runs: the executing engine beats it while alive, so
+    // boot-time stale-run recovery can tell a crashed run from one another process
+    // (e.g. a CLI `team run`) is still executing. After runMigrations: the team
+    // tables are created there.
+    this.ensureColumn('agent_system_runs', 'heartbeat_at', 'TEXT');
+  }
+  /** Additive-only migration: add a column when an older DB lacks it. Idempotent. */
+  private ensureColumn(table: string, column: string, ddl: string): void {
+    const cols = this.db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+    if (!cols.some((c) => c.name === column)) {
+      this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${ddl}`);
+    }
+  }
+  /** Raw handle for sibling stores (PlatformStore) that share this connection. */
+  get raw(): Database.Database { return this.db; }
+  saveAgent(name: string, version: string, definitionJson: string, hash: string, status = 'published'): string {
+    const id = `${name}@${version}`;
+    this.db.prepare(`INSERT INTO agents(id,name,version,definition_json,definition_hash,created_at,status) VALUES(?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET definition_json=excluded.definition_json, definition_hash=excluded.definition_hash, status=excluded.status`).run(id, name, version, definitionJson, hash, new Date().toISOString(), status);
+    this.recordDefinitionVersion(id, version, definitionJson, hash);
+    return id;
+  }
+  /**
+   * Append-only definition history. Editing an agent overwrites `agents.definition_json`
+   * in place, so a team that pinned the old hash needs this table to keep resolving to
+   * the exact bytes it pinned. Idempotent on (agent_id, definition_hash).
+   */
+  private recordDefinitionVersion(agentId: string, version: string, definitionJson: string, hash: string): void {
+    try {
+      this.db.prepare(`INSERT OR IGNORE INTO agent_definition_versions(id,agent_id,version,definition_hash,definition_json,created_at) VALUES(?,?,?,?,?,?)`)
+        .run(`adv_${randomUUID().slice(0, 12)}`, agentId, version, hash, definitionJson, new Date().toISOString());
+    } catch { /* history is best-effort; a run still works from the live row */ }
+  }
+  /** A historical definition body for a pinned hash (team run resolution). */
+  findDefinitionVersion(agentId: string, hash: string): { definition_json: string; definition_hash: string; version: string } | undefined {
+    return this.db.prepare(`SELECT definition_json, definition_hash, version FROM agent_definition_versions WHERE agent_id=? AND definition_hash=? LIMIT 1`)
+      .get(agentId, hash) as { definition_json: string; definition_hash: string; version: string } | undefined;
+  }
+  /** All recorded definition versions for an agent, newest first (API/UI history). */
+  listDefinitionVersions(agentId: string): { id: string; version: string; definition_hash: string; created_at: string }[] {
+    return this.db.prepare(`SELECT id, version, definition_hash, created_at FROM agent_definition_versions WHERE agent_id=? ORDER BY created_at DESC`)
+      .all(agentId) as { id: string; version: string; definition_hash: string; created_at: string }[];
+  }
+  getAgent(id: string) {
+    return this.db.prepare(`SELECT id,name,version,definition_json,definition_hash,created_at,COALESCE(status, 'published') as status FROM agents WHERE id=?`).get(id) as { id: string; name: string; version: string; definition_json: string; definition_hash?: string | null; status?: string } | undefined;
+  }
+  listAgents(status = 'published') {
+    if (status === 'all') {
+      return this.db.prepare(`SELECT id,name,version,created_at,COALESCE(status, 'published') as status FROM agents ORDER BY created_at DESC`).all() as { id: string; name: string; version: string; created_at: string; status?: string }[];
+    }
+    return this.db.prepare(`SELECT id,name,version,created_at,COALESCE(status, 'published') as status FROM agents WHERE status = ? OR (status IS NULL AND ? = 'published') ORDER BY created_at DESC`).all(status, status) as { id: string; name: string; version: string; created_at: string; status?: string }[];
+  }
+  updateAgentDefinition(id: string, definitionJson: string, hash: string): boolean {
+    const r = this.db.prepare(`UPDATE agents SET definition_json=?, definition_hash=? WHERE id=?`).run(definitionJson, hash, id);
+    if (r.changes > 0) {
+      const row = this.db.prepare(`SELECT version FROM agents WHERE id=?`).get(id) as { version?: string } | undefined;
+      this.recordDefinitionVersion(id, row?.version ?? '', definitionJson, hash);
+    }
+    return r.changes > 0;
+  }
+  deleteAgent(id: string): boolean {
+    const r = this.db.prepare(`DELETE FROM agents WHERE id=?`).run(id);
+    return r.changes > 0;
+  }
+  agentActivity(agentId: string) {
+    const runs = this.db.prepare(`SELECT COUNT(*) AS total, SUM(CASE WHEN status='running' THEN 1 ELSE 0 END) AS active FROM runs WHERE agent_id=?`).get(agentId) as { total: number; active: number | null };
+    const sessions = this.db.prepare(`SELECT COUNT(*) AS total, SUM(CASE WHEN status IS NULL OR status IN ('created','running','open','active') THEN 1 ELSE 0 END) AS active FROM sessions WHERE agent_id=?`).get(agentId) as { total: number; active: number | null };
+    return {
+      activeRuns: runs.active ?? 0,
+      activeSessions: sessions.active ?? 0,
+      totalRuns: runs.total ?? 0,
+      totalSessions: sessions.total ?? 0,
+    };
+  }
+  createRun(agentId: string, sessionId: string, traceId: string, model: string, providerType: string, taskPrompt: string, definitionHash: string, extra?: { source?: string; threadId?: string; projectId?: string; definitionJson?: string | null }): string {
+    const id = `run_${randomUUID().slice(0, 8)}`;
+    this.db.prepare(`INSERT INTO runs(id,agent_id,session_id,trace_id,status,model,provider_type,task_prompt,definition_hash,definition_json,created_at,source,thread_id,project_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id, agentId, sessionId, traceId, 'running', model, providerType, taskPrompt.slice(0, 4000), definitionHash, extra?.definitionJson ?? null, new Date().toISOString(), extra?.source ?? 'run', extra?.threadId ?? null, extra?.projectId ?? null);
+    return id;
+  }
+  appendEvent(runId: string, seq: number, type: string, payloadJson: string, persisted: boolean) {
+    this.db.prepare(`INSERT INTO events(run_id,seq,type,payload_json,persisted,at) VALUES(?,?,?,?,?,?)`).run(runId, seq, type, clampEventPayload(payloadJson), persisted ? 1 : 0, new Date().toISOString());
+  }
+  finishRun(runId: string, status: RunStatus, error?: string) {
+    this.db.prepare(`UPDATE runs SET status=?, finished_at=?, error=? WHERE id=?`).run(status, new Date().toISOString(), error ?? null, runId);
+  }
+  recordUsage(runId: string, u: { tokensIn?: number; tokensOut?: number; credits?: number; durationMs?: number; endpoint?: string; requestId?: string }) {
+    this.db.prepare(`INSERT INTO usage(run_id,tokens_in,tokens_out,credits,duration_ms,endpoint,request_id) VALUES(?,?,?,?,?,?,?) ON CONFLICT(run_id) DO UPDATE SET tokens_in=excluded.tokens_in, tokens_out=excluded.tokens_out, credits=excluded.credits`).run(runId, u.tokensIn ?? null, u.tokensOut ?? null, u.credits ?? null, u.durationMs ?? null, u.endpoint ?? null, u.requestId ?? null);
+  }
+  getRun(runId: string) {
+    return this.db.prepare(`SELECT ${RUN_COLUMNS} FROM runs WHERE id=?`).get(runId) as Record<string, unknown> | undefined;
+  }
+  listRuns(agentId?: string) {
+    return (agentId
+      ? this.db.prepare(`SELECT ${RUN_COLUMNS} FROM runs WHERE agent_id=? ORDER BY created_at DESC LIMIT 100`).all(agentId)
+      : this.db.prepare(`SELECT ${RUN_COLUMNS} FROM runs ORDER BY created_at DESC LIMIT 100`).all()) as Record<string, unknown>[];
+  }
+  /** The sealed definition snapshot recorded at run start (what actually executed). Not part of run rows. */
+  getRunDefinition(runId: string): string | undefined {
+    const row = this.db.prepare(`SELECT definition_json FROM runs WHERE id=?`).get(runId) as { definition_json: string | null } | undefined;
+    return row?.definition_json ?? undefined;
+  }
+  getEvents(runId: string, afterSeq = 0) {
+    return this.db.prepare(`SELECT seq,type,payload_json,persisted,at FROM events WHERE run_id=? AND seq>? ORDER BY seq`).all(runId, afterSeq) as { seq: number; type: string; payload_json: string; persisted: number; at: string }[];
+  }
+  /** Hourly buckets of run activity for the dashboard charts. SQLite string ISO timestamps sort lexicographically. */
+  runsTimeline(hours = 24) {
+    const cutoff = new Date(Date.now() - hours * 3600 * 1000).toISOString();
+    const rows = this.db.prepare(`
+      SELECT substr(created_at, 1, 13) AS hour,
+             COUNT(*) AS requests,
+             SUM(CASE WHEN status='done' THEN 1 ELSE 0 END) AS succeeded,
+             SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END) AS failed,
+             SUM(CASE WHEN status='running' THEN 1 ELSE 0 END) AS running
+      FROM runs WHERE created_at >= ?
+      GROUP BY hour ORDER BY hour`).all(cutoff) as { hour: string; requests: number; succeeded: number; failed: number; running: number }[];
+    // Fill gaps so the chart x-axis is continuous.
+    const byHour = new Map(rows.map((r) => [r.hour, r]));
+    const out: { hour: string; requests: number; succeeded: number; failed: number; running: number }[] = [];
+    const start = new Date(Math.floor((Date.now() - hours * 3600 * 1000) / 3600000) * 3600000);
+    for (let i = 0; i <= hours; i++) {
+      const h = new Date(start.getTime() + i * 3600000).toISOString().slice(0, 13);
+      out.push(byHour.get(h) ?? { hour: h, requests: 0, succeeded: 0, failed: 0, running: 0 });
+    }
+    return out;
+  }
+  runsByModel() {
+    return this.db.prepare(`
+      SELECT COALESCE(NULLIF(model,''),'(unknown)') AS model,
+             COUNT(*) AS requests,
+             SUM(CASE WHEN status='done' THEN 1 ELSE 0 END) AS succeeded,
+             SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END) AS failed,
+             AVG(CASE WHEN finished_at IS NOT NULL THEN (julianday(finished_at)-julianday(created_at))*86400000 END) AS avgDurationMs,
+             (SELECT SUM(u.tokens_in) FROM usage u JOIN runs r2 ON r2.id=u.run_id WHERE r2.model=runs.model) AS tokensIn,
+             (SELECT SUM(u.tokens_out) FROM usage u JOIN runs r3 ON r3.id=u.run_id WHERE r3.model=runs.model) AS tokensOut
+      FROM runs GROUP BY model ORDER BY requests DESC`).all() as { model: string; requests: number; succeeded: number; failed: number; avgDurationMs: number | null; tokensIn: number | null; tokensOut: number | null }[];
+  }
+  requestTotals() {
+    const r = this.db.prepare(`
+      SELECT COUNT(*) AS requests,
+             SUM(CASE WHEN status IN ('done','failed','aborted') THEN 1 ELSE 0 END) AS responses,
+             SUM(CASE WHEN status='done' THEN 1 ELSE 0 END) AS succeeded,
+             SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END) AS failed
+      FROM runs`).get() as { requests: number; responses: number | null; succeeded: number | null; failed: number | null };
+    return { requests: r.requests ?? 0, responses: r.responses ?? 0, succeeded: r.succeeded ?? 0, failed: r.failed ?? 0 };
+  }
+  saveTranscript(runId: string, path: string, sha256: string) {
+    this.db.prepare(`INSERT INTO transcripts(run_id,path,sha256) VALUES(?,?,?) ON CONFLICT(run_id) DO UPDATE SET path=excluded.path, sha256=excluded.sha256`).run(runId, path, sha256);
+  }
+  saveMcpServer(input: { name: string; config_json: string; description?: string; tools_json?: string }): string {
+    this.db.prepare(`INSERT INTO mcp_servers(name,config_json,description,tools_json,created_at) VALUES(?,?,?,?,?) ON CONFLICT(name) DO UPDATE SET config_json=excluded.config_json, description=excluded.description, tools_json=COALESCE(excluded.tools_json, mcp_servers.tools_json)`).run(input.name, input.config_json, input.description ?? null, input.tools_json ?? null, new Date().toISOString());
+    return input.name;
+  }
+  getMcpServer(name: string) {
+    return this.db.prepare(`SELECT name,config_json,description,tools_json,created_at FROM mcp_servers WHERE name=?`).get(name) as { name: string; config_json: string; description: string | null; tools_json: string | null; created_at: string } | undefined;
+  }
+  listMcpServers() {
+    return this.db.prepare(`SELECT name,description,tools_json,created_at FROM mcp_servers ORDER BY created_at DESC`).all() as { name: string; description: string | null; tools_json: string | null; created_at: string }[];
+  }
+  updateMcpServerTools(name: string, toolsJson: string) {
+    this.db.prepare(`UPDATE mcp_servers SET tools_json=? WHERE name=?`).run(toolsJson, name);
+  }
+  deleteMcpServer(name: string): boolean {
+    const r = this.db.prepare(`DELETE FROM mcp_servers WHERE name=?`).run(name);
+    return r.changes > 0;
+  }
+  upsertSession(input: { sessionId: string; runId?: string; agentId?: string; traceId?: string; status?: string; summary?: string }): void {
+    this.db.prepare(`INSERT INTO sessions(session_id,run_id,agent_id,trace_id,status,summary,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)
+      ON CONFLICT(session_id) DO UPDATE SET run_id=COALESCE(excluded.run_id, sessions.run_id), status=COALESCE(excluded.status, sessions.status), summary=COALESCE(excluded.summary, sessions.summary), updated_at=excluded.updated_at`)
+      .run(input.sessionId, input.runId ?? null, input.agentId ?? null, input.traceId ?? null, input.status ?? 'created', input.summary ?? null, new Date().toISOString(), new Date().toISOString());
+  }
+  getSession(sessionId: string) {
+    return this.db.prepare(`SELECT * FROM sessions WHERE session_id=?`).get(sessionId) as Record<string, unknown> | undefined;
+  }
+  listSessions() {
+    return this.db.prepare(`SELECT * FROM sessions ORDER BY updated_at DESC LIMIT 200`).all() as Record<string, unknown>[];
+  }
+  /** Dashboard rollup: token/credit/duration totals across all usage rows. */
+  usageSummary(): { tokensIn: number | null; tokensOut: number | null; credits: number | null; avgDurationMs: number | null; rows: number } {
+    const r = this.db.prepare(`SELECT
+      SUM(tokens_in) AS tokens_in, SUM(tokens_out) AS tokens_out, SUM(credits) AS credits,
+      AVG(duration_ms) AS avg_duration_ms, COUNT(*) AS rows
+      FROM usage WHERE tokens_in IS NOT NULL OR tokens_out IS NOT NULL OR credits IS NOT NULL OR duration_ms IS NOT NULL`).get() as { tokens_in: number | null; tokens_out: number | null; credits: number | null; avg_duration_ms: number | null; rows: number };
+    return { tokensIn: r.tokens_in, tokensOut: r.tokens_out, credits: r.credits, avgDurationMs: r.avg_duration_ms, rows: r.rows ?? 0 };
+  }
+  saveCredential(name: string, secret: string): void {
+    const enc = encryptSecret(secret);
+    const now = new Date().toISOString();
+    this.db.prepare(`INSERT INTO credentials(name,ciphertext,iv,tag,created_at,updated_at) VALUES(?,?,?,?,?,?)
+      ON CONFLICT(name) DO UPDATE SET ciphertext=excluded.ciphertext, iv=excluded.iv, tag=excluded.tag, updated_at=excluded.updated_at`)
+      .run(name, enc.ciphertext, enc.iv, enc.tag, now, now);
+  }
+  getCredentialSecret(name: string): string | undefined {
+    const row = this.db.prepare(`SELECT ciphertext,iv,tag FROM credentials WHERE name=?`).get(name) as { ciphertext: string; iv: string; tag: string } | undefined;
+    if (!row) return undefined;
+    try {
+      return decryptSecret(row);
+    } catch {
+      // The DB was opened with a different (or missing) .master-key. Treat the
+      // ciphertext as unavailable instead of failing every read that touches it;
+      // the UI then reports hasKey=false and asks the operator to re-enter the key.
+      return undefined;
+    }
+  }
+  listCredentials() {
+    // Names + timestamps only — secrets never leave this module in list form.
+    return this.db.prepare(`SELECT name,created_at,updated_at FROM credentials ORDER BY name`).all() as { name: string; created_at: string; updated_at: string }[];
+  }
+  deleteCredential(name: string): boolean {
+    const r = this.db.prepare(`DELETE FROM credentials WHERE name=?`).run(name);
+    return r.changes > 0;
+  }
+  // ---------- chat ----------
+  createChatThread(input: { title: string; agentId: string | null; sessionId: string | null; projectId?: string | null; modelOverride?: string | null }): string {
+    const id = `chat_${randomUUID().slice(0, 8)}`;
+    const now = new Date().toISOString();
+    this.db.prepare(`INSERT INTO chat_threads(id,title,agent_id,session_id,created_at,updated_at,project_id,model_override) VALUES(?,?,?,?,?,?,?,?)`).run(id, input.title.slice(0, 200), input.agentId, input.sessionId, now, now, input.projectId ?? null, input.modelOverride ?? null);
+    return id;
+  }
+  getChatThread(id: string): Record<string, unknown> | undefined {
+    return this.db.prepare(`SELECT * FROM chat_threads WHERE id=?`).get(id) as Record<string, unknown> | undefined;
+  }
+  listChatThreads(filter?: { agentId?: string; projectId?: string; includeArchived?: boolean; q?: string }): Record<string, unknown>[] {
+    const where: string[] = [];
+    const vals: unknown[] = [];
+    if (filter?.agentId) { where.push('t.agent_id=?'); vals.push(filter.agentId); }
+    if (filter?.projectId) { where.push('t.project_id=?'); vals.push(filter.projectId); }
+    if (!filter?.includeArchived) where.push('t.archived=0');
+    if (filter?.q) {
+      where.push('(t.title LIKE ? OR EXISTS (SELECT 1 FROM chat_messages m WHERE m.thread_id=t.id AND m.content LIKE ?))');
+      const like = `%${filter.q.replace(/[%_]/g, (c) => `\\${c}`)}%`;
+      vals.push(like, like);
+    }
+    const sql = `SELECT t.*, (SELECT COUNT(*) FROM chat_messages m WHERE m.thread_id=t.id) AS message_count FROM chat_threads t ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY t.pinned DESC, t.updated_at DESC LIMIT 500`;
+    return this.db.prepare(sql.replace(/LIKE \?/g, "LIKE ? ESCAPE '\\'")).all(...vals) as Record<string, unknown>[];
+  }
+  updateChatThread(id: string, fields: { title?: string; sessionId?: string | null; updated_at?: string; agentId?: string | null; projectId?: string | null; pinned?: boolean; archived?: boolean; modelOverride?: string | null; approvalMode?: string | null }): boolean {
+    const sets: string[] = [];
+    const vals: unknown[] = [];
+    if (fields.title !== undefined) { sets.push('title=?'); vals.push(fields.title.slice(0, 200)); }
+    if (fields.sessionId !== undefined) { sets.push('session_id=?'); vals.push(fields.sessionId); }
+    if (fields.updated_at !== undefined) { sets.push('updated_at=?'); vals.push(fields.updated_at); }
+    if (fields.agentId !== undefined) { sets.push('agent_id=?'); vals.push(fields.agentId); }
+    if (fields.projectId !== undefined) { sets.push('project_id=?'); vals.push(fields.projectId); }
+    if (fields.pinned !== undefined) { sets.push('pinned=?'); vals.push(fields.pinned ? 1 : 0); }
+    if (fields.archived !== undefined) { sets.push('archived=?'); vals.push(fields.archived ? 1 : 0); }
+    if (fields.modelOverride !== undefined) { sets.push('model_override=?'); vals.push(fields.modelOverride); }
+    if (fields.approvalMode !== undefined) { sets.push('approval_mode=?'); vals.push(fields.approvalMode); }
+    if (!sets.length) return false;
+    vals.push(id);
+    return this.db.prepare(`UPDATE chat_threads SET ${sets.join(', ')} WHERE id=?`).run(...vals as unknown[]).changes > 0;
+  }
+  deleteChatThread(id: string): boolean {
+    this.db.prepare(`DELETE FROM chat_messages WHERE thread_id=?`).run(id);
+    this.db.prepare(`DELETE FROM approvals WHERE thread_id=?`).run(id);
+    return this.db.prepare(`DELETE FROM chat_threads WHERE id=?`).run(id).changes > 0;
+  }
+  addChatMessage(threadId: string, m: { role: string; author: string; content: string; runId?: string | null; meta?: Record<string, unknown> | null }): number {
+    const now = new Date().toISOString();
+    const r = this.db.prepare(`INSERT INTO chat_messages(thread_id,role,author,content,run_id,created_at,meta_json) VALUES(?,?,?,?,?,?,?)`).run(threadId, m.role, m.author, m.content.slice(0, 100000), m.runId ?? null, now, m.meta ? JSON.stringify(m.meta) : null);
+    this.db.prepare(`UPDATE chat_threads SET updated_at=? WHERE id=?`).run(now, threadId);
+    return Number(r.lastInsertRowid);
+  }
+  getChatMessages(threadId: string): Record<string, unknown>[] {
+    return this.db.prepare(`SELECT mtid,role,author,content,run_id,created_at,meta_json FROM chat_messages WHERE thread_id=? ORDER BY mtid`).all(threadId) as Record<string, unknown>[];
+  }
+  setRunAuditPath(runId: string, path: string): void {
+    this.db.prepare(`UPDATE runs SET audit_path=? WHERE id=?`).run(path, runId);
+  }  close() { this.db.close(); }
+}

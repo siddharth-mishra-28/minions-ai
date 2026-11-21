@@ -1,0 +1,155 @@
+{
+  "schemaVersion": "1.0",
+  "metadata": {
+    "name": "requirements-analyst",
+    "version": "1.0.0",
+    "description": "Requirements analyst: turns goals into numbered, testable requirements with acceptance criteria and a traceability view.",
+    "tags": [
+      "requirements",
+      "analysis",
+      "acceptance-criteria"
+    ],
+    "color": "#7c3aed"
+  },
+  "persona": {
+    "useCopilotDefaultPrompt": true,
+    "systemMessage": {
+      "mode": "append",
+      "content": "You are a rigorous requirements analyst. You turn fuzzy goals into numbered, testable requirements with unambiguous acceptance criteria (Given/When/Then), a domain model, and a traceability view from goal to requirement to criterion. You resolve ambiguity by asking or by stating the simplest production-sensible assumption explicitly. You never write application code. Work only inside the current working directory."
+    }
+  },
+  "instructions": {
+    "global": [
+      "The deliverable root is the current working directory (the run workspace). Do not write outside the workspace.",
+      "Produce a requirements document with: numbered functional and non-functional requirements (R-001…), each with Given/When/Then acceptance criteria; a domain model; the interface surface the requirements imply; and a traceability matrix.",
+      "Every requirement must be testable — if it cannot be verified by a test or an inspection, rewrite it.",
+      "You are strictly read-only: you may inspect the workspace but never execute commands or write application files.",
+      "Flag conflicts, gaps and assumptions explicitly; never silently invent requirements.",
+      "The final answer must be the requirements summary: counts by type, key risks, assumptions and open questions. No marketing language."
+    ],
+    "scoped": []
+  },
+  "knowledge": {
+    "workingDirectory": ".",
+    "sessionStore": false
+  },
+  "skills": {
+    "directories": [],
+    "disabled": []
+  },
+  "task": {
+    "prompt": "Receive the objective, elicit and write numbered testable requirements with acceptance criteria, and report the requirements baseline.",
+    "deliveryMode": "enqueue"
+  },
+  "tools": {
+    "permissionPolicy": "pattern-list",
+    "builtins": {
+      "default": "deny",
+      "all": false
+    },
+    "harness": false,
+    "allowDestructive": false,
+    "patterns": [
+      {
+        "tool": "read",
+        "decision": "allow",
+        "reason": "read-only inspection"
+      },
+      {
+        "tool": "view",
+        "decision": "allow",
+        "reason": "read-only inspection"
+      },
+      {
+        "tool": "grep",
+        "decision": "allow",
+        "reason": "read-only inspection"
+      },
+      {
+        "tool": "glob",
+        "decision": "allow",
+        "reason": "read-only inspection"
+      },
+      {
+        "tool": "ls",
+        "decision": "allow",
+        "reason": "read-only inspection"
+      },
+      {
+        "tool": "bash",
+        "decision": "deny",
+        "reason": "analysis roles never execute commands"
+      },
+      {
+        "tool": "write",
+        "decision": "deny",
+        "reason": "analysis roles never write application files"
+      },
+      {
+        "tool": "create",
+        "decision": "deny",
+        "reason": "analysis roles never write application files"
+      },
+      {
+        "tool": "edit",
+        "decision": "deny",
+        "reason": "analysis roles never write application files"
+      }
+    ]
+  },
+  "mcp": {
+    "servers": {},
+    "use": []
+  },
+  "memory": {
+    "enabled": true,
+    "scope": {
+      "agent": true,
+      "platform": true,
+      "crossAgentRead": false,
+      "writeTarget": "agent"
+    },
+    "recall": {
+      "enabled": true,
+      "k": 12,
+      "hops": 1,
+      "maxChars": 6000,
+      "includeFacts": true
+    },
+    "codeGraph": {
+      "enabled": true,
+      "autoRefresh": true,
+      "root": ".",
+      "symbols": true,
+      "maxFiles": 4000
+    },
+    "capture": {
+      "episodes": true,
+      "toolFailures": true,
+      "commands": true
+    },
+    "distill": "heuristic"
+  },
+  "provider": {
+    "type": "openai",
+    "baseUrl": "https://api.xiaomimimo.com/v1",
+    "model": "mimo-v2.6-flash",
+    "wireApi": "completions",
+    "providerApiKey": "${MIMO_API_KEY}"
+  },
+  "runtime": {
+    "streaming": false,
+    "turnTimeoutMs": 5400000,
+    "maxAiCredits": 5000,
+    "logLevel": "info",
+    "toolSearch": {
+      "enabled": false
+    },
+    "clientInfo": {
+      "applicationName": "minions-ai",
+      "applicationVersion": "1.0.0",
+      "integrationName": "requirements-analyst",
+      "integrationVersion": "1.0.0"
+    }
+  }
+}

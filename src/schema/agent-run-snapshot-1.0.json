@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://minions-assembler/schema/agent-run-snapshot-1.0.json",
+  "title": "Agent System Run Snapshot v1.0",
+  "description": "Immutable, resolved configuration of one team run. Contains no credentials: only provider attribute names that the runtime resolves later.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion", "kind", "runId", "systemId", "systemName", "systemVersion",
+    "systemDefinitionHash", "workflowId", "workflowName", "workflowVersion",
+    "workflowDefinitionHash", "mode", "resolvedMembers", "engineVersion", "task",
+    "communication", "limits", "createdAt"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "kind": { "const": "agent-run-snapshot" },
+    "runId": { "type": "string" },
+    "systemId": { "type": "string" },
+    "systemName": { "type": "string" },
+    "systemVersion": { "type": "string" },
+    "systemDefinitionHash": { "type": "string" },
+    "workflowId": { "type": "string" },
+    "workflowName": { "type": "string" },
+    "workflowVersion": { "type": "string" },
+    "workflowDefinitionHash": { "type": "string" },
+    "mode": { "enum": ["sequential", "parallel", "hierarchical", "hybrid"] },
+    "resolvedMembers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["memberId", "role", "agentId", "agentVersion", "definitionHash", "definitionJson"],
+        "properties": {
+          "memberId": { "type": "string" },
+          "role": { "type": "string" },
+          "agentId": { "type": "string" },
+          "agentVersion": { "type": "string" },
+          "definitionHash": { "type": "string" },
+          "definitionJson": { "type": "string" }
+        }
+      }
+    },
+    "addedMembers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["memberId", "role", "agentId", "agentVersion", "definitionHash", "definitionJson"],
+        "properties": {
+          "memberId": { "type": "string" },
+          "role": { "type": "string" },
+          "agentId": { "type": "string" },
+          "agentVersion": { "type": "string" },
+          "definitionHash": { "type": "string" },
+          "definitionJson": { "type": "string" }
+        }
+      }
+    },
+    "engineVersion": { "type": "string" },
+    "task": { "type": "string" },
+    "communication": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "allowPeerToPeer", "maxRounds"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "allowPeerToPeer": { "type": "boolean" },
+        "maxRounds": { "type": "integer", "minimum": 1, "maximum": 20 },
+        "verbosity": { "enum": ["minimal", "concise", "normal"] },
+        "maxMessagesPerTurn": { "type": "integer", "minimum": 0, "maximum": 20 },
+        "maxBodyChars": { "type": "integer", "minimum": 120, "maximum": 20000 }
+      }
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["maxDurationMs", "maxNodeRuns", "maxIterations", "maxConcurrentTasks", "maxAttempts", "backoffMs", "retryBackoffMultiplier"],
+      "properties": {
+        "maxDurationMs": { "type": "integer" },
+        "maxNodeRuns": { "type": "integer" },
+        "maxIterations": { "type": "integer" },
+        "maxConcurrentTasks": { "type": "integer" },
+        "maxAttempts": { "type": "integer" },
+        "backoffMs": { "type": "integer" },
+        "retryBackoffMultiplier": { "type": "number" }
+      }
+    },
+    "createdAt": { "type": "string" }
+  }
+}

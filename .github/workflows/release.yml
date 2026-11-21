@@ -1,0 +1,167 @@
+name: build-release-pages
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-pages-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: win-x64
+            artifact: minions-ai-win-x64.exe
+            binary: minions-ai-win-x64.exe
+          - os: macos-14
+            target: mac-arm64
+            artifact: minions-ai-mac-arm64
+            binary: minions-ai-mac-arm64
+          - os: macos-13
+            target: mac-x64
+            artifact: minions-ai-mac-x64
+            binary: minions-ai-mac-x64
+          - os: ubuntu-latest
+            target: linux-x64
+            artifact: minions-ai-linux-x64
+            binary: minions-ai-linux-x64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.14.0
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            web/package-lock.json
+      - name: Install dependencies
+        run: |
+          npm ci --no-audit --no-fund
+          npm --prefix web ci --no-audit --no-fund
+      - name: Typecheck and test
+        run: |
+          npm run typecheck
+          npm test
+      - name: Build cockpit
+        run: npm --prefix web run build
+      - name: Build executable
+        run: node scripts/build-exe.mjs --target ${{ matrix.target }}
+      - name: Smoke CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIN="release/${{ matrix.binary }}"
+          chmod +x "$BIN" || true
+          "$BIN" --version
+          "$BIN" --help > /dev/null
+      - name: Smoke server
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIN="release/${{ matrix.binary }}"
+          chmod +x "$BIN" || true
+          "$BIN" serve --port 3110 --db ./smoke.db > server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill $SERVER_PID 2>/dev/null || true' EXIT
+          for i in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:3110/api/status > status.json; then break; fi
+            sleep 1
+          done
+          cat status.json
+          curl -fsS http://127.0.0.1:3110/openapi.json > /dev/null
+          curl -fsS http://127.0.0.1:3110/docs > /dev/null
+          curl -fsS http://127.0.0.1:3110/ > /dev/null
+          kill $SERVER_PID
+          trap - EXIT
+      - name: Upload executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            release/${{ matrix.binary }}
+            release/${{ matrix.binary }}.sha256
+
+  release:
+    name: publish release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Normalize stable assets and checksums
+        run: |
+          set -euo pipefail
+          cd dist
+          chmod +x minions-ai-mac-arm64 minions-ai-mac-x64 minions-ai-linux-x64 2>/dev/null || true
+          cp minions-ai-mac-arm64 minions-ai
+          zip -j minions-ai-mac-arm64.zip minions-ai
+          rm minions-ai
+          cp minions-ai-mac-x64 minions-ai
+          zip -j minions-ai-mac-x64.zip minions-ai
+          rm minions-ai
+          cp minions-ai-linux-x64 minions-ai
+          tar -czf minions-ai-linux-x64.tar.gz minions-ai
+          rm minions-ai
+          rm -f minions-ai-mac-arm64 minions-ai-mac-x64 minions-ai-linux-x64
+          sha256sum minions-ai-win-x64.exe minions-ai-mac-arm64.zip minions-ai-mac-x64.zip minions-ai-linux-x64.tar.gz > SHA256SUMS
+          cat SHA256SUMS
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/minions-ai-win-x64.exe
+            dist/minions-ai-mac-arm64.zip
+            dist/minions-ai-mac-x64.zip
+            dist/minions-ai-linux-x64.tar.gz
+            dist/SHA256SUMS
+          generate_release_notes: true
+
+  pages:
+    name: deploy docs
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.14.0
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            web/package-lock.json
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Build docs site
+        run: npm run build:site
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site/.vitepress/dist
+      - id: deployment
+        uses: actions/deploy-pages@v4

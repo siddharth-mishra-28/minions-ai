@@ -1,0 +1,268 @@
+{
+  "$schema": "https://minions-ai/schema/agent-system-definition-1.0.json",
+  "schemaVersion": "1.0",
+  "kind": "agent-system",
+  "metadata": {
+    "id": "software-delivery-team",
+    "name": "Software Delivery Team",
+    "version": "2.0.0",
+    "description": "A five-role delivery team over the shipped role agents: a manager-led workflow delegates to analyst, architect, developer and QA, and a sequential agile pipeline runs analyst → developer → QA with a bounded rework loop. Members share one repository; swap any agentRef for an agent you register yourself."
+  },
+  "team": {
+    "members": [
+      {
+        "memberId": "manager",
+        "role": "Delivery Lead",
+        "workspace": "shared",
+        "agentRef": {
+          "agentId": "manager@1.0.0",
+          "version": "1.0.0",
+          "definitionHash": "sha256:1c2f56fec4381c69"
+        },
+        "delegation": {
+          "allowedMemberIds": [
+            "analyst",
+            "architect",
+            "developer",
+            "qa"
+          ],
+          "maxDepth": 2,
+          "maxConcurrentDelegates": 2
+        },
+        "instructions": "Act as the delivery lead. Read the objective, decompose it into workstreams, delegate with team_delegate to the analyst, architect, developer and qa members (implementation before verification), review every returned artifact, request fixes where work is missing or wrong, and report status complete only when the objective is genuinely delivered. Publish a delivery-summary artifact."
+      },
+      {
+        "memberId": "architect",
+        "role": "Solution Architect",
+        "workspace": "shared",
+        "agentRef": {
+          "agentId": "architect@1.0.0",
+          "version": "1.0.0",
+          "definitionHash": "sha256:652fcb331c92ca65"
+        },
+        "instructions": "Act as the solution architect. Design the components, data model and frozen contracts the requirements imply, record the key decisions as ADRs, and publish them as an architecture-decision-record artifact. Do not write application code.",
+        "reportsTo": "manager"
+      },
+      {
+        "memberId": "analyst",
+        "role": "Requirements Analyst",
+        "workspace": "shared",
+        "agentRef": {
+          "agentId": "requirements-analyst@1.0.0",
+          "version": "1.0.0",
+          "definitionHash": "sha256:a40581252b9a8b51"
+        },
+        "instructions": "Act as the requirements analyst. Produce concise, numbered and testable requirements with acceptance criteria, and publish them as a requirements-document artifact. Do not write application code.",
+        "reportsTo": "manager"
+      },
+      {
+        "memberId": "developer",
+        "role": "Software Developer",
+        "workspace": "shared",
+        "agentRef": {
+          "agentId": "full-stack-developer@1.0.0",
+          "version": "1.0.0",
+          "definitionHash": "sha256:d26c5aadb03a1aef"
+        },
+        "instructions": "Act as the software developer. Implement the approved requirements in the team workspace, run the tests and the build yourself, and publish an implementation-report artifact listing the files you created and the exact commands you ran with their results.",
+        "reportsTo": "manager"
+      },
+      {
+        "memberId": "qa",
+        "role": "QE Engineer",
+        "workspace": "shared",
+        "agentRef": {
+          "agentId": "qe-engineer@1.0.0",
+          "version": "1.0.0",
+          "definitionHash": "sha256:9a54c23230cdeb39"
+        },
+        "instructions": "Act as the QE engineer. Independently re-run the test suite and the product's own commands, check the implementation against every requirement, publish a test-results artifact with the real output and a per-requirement verdict, and return output.status \"passed\" or \"failed\".",
+        "reportsTo": "manager"
+      }
+    ]
+  },
+  "orchestration": {
+    "defaultWorkflowId": "agile-delivery",
+    "communication": {
+      "enabled": true,
+      "mode": "orchestrator-mediated",
+      "allowPeerToPeer": true,
+      "persistMessages": true,
+      "maxRounds": 3,
+      "contextPolicy": "thread-and-artifacts"
+    },
+    "workflows": [
+      {
+        "workflowId": "agile-delivery",
+        "name": "Sequential Agile Delivery",
+        "mode": "sequential",
+        "version": "2.0.0",
+        "entryNodeId": "requirements",
+        "limits": {
+          "maxDurationMs": 12600000,
+          "maxNodeRuns": 12,
+          "maxIterations": 3,
+          "maxConcurrentTasks": 1,
+          "maxAttempts": 2,
+          "backoffMs": 1000,
+          "retryBackoffMultiplier": 2
+        },
+        "nodes": [
+          {
+            "nodeId": "requirements",
+            "type": "agent-task",
+            "memberId": "analyst",
+            "outputContract": {
+              "artifactTypes": [
+                "requirements-document"
+              ],
+              "required": true
+            }
+          },
+          {
+            "nodeId": "implementation",
+            "type": "agent-task",
+            "memberId": "developer",
+            "outputContract": {
+              "artifactTypes": [
+                "implementation-report"
+              ],
+              "required": true
+            }
+          },
+          {
+            "nodeId": "testing",
+            "type": "agent-task",
+            "memberId": "qa",
+            "outputContract": {
+              "artifactTypes": [
+                "test-results"
+              ],
+              "required": true
+            }
+          },
+          {
+            "nodeId": "completed",
+            "type": "terminal"
+          }
+        ],
+        "edges": [
+          {
+            "from": "requirements",
+            "to": "implementation"
+          },
+          {
+            "from": "implementation",
+            "to": "testing"
+          },
+          {
+            "from": "testing",
+            "to": "implementation",
+            "label": "QA requests changes",
+            "when": {
+              "path": "output.status",
+              "operator": "in",
+              "value": [
+                "failed",
+                "blocked",
+                "rejected",
+                "changes-requested",
+                "error",
+                "cancelled",
+                "stopped"
+              ]
+            }
+          },
+          {
+            "from": "testing",
+            "to": "completed",
+            "label": "QA passes",
+            "when": {
+              "path": "output.status",
+              "operator": "in",
+              "value": [
+                "passed",
+                "done",
+                "complete",
+                "completed",
+                "success",
+                "accepted",
+                "approved",
+                "ok"
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "workflowId": "manager-led",
+        "name": "Manager-Led Hierarchical Delivery",
+        "mode": "hierarchical",
+        "version": "2.0.0",
+        "entryNodeId": "manager",
+        "manager": {
+          "memberId": "manager",
+          "maxDelegationDepth": 2,
+          "maxParallelTasks": 2,
+          "allowDynamicTaskCreation": true,
+          "requireCompletionReview": true
+        },
+        "limits": {
+          "maxDurationMs": 12600000,
+          "maxNodeRuns": 10,
+          "maxIterations": 2,
+          "maxConcurrentTasks": 2,
+          "maxAttempts": 2,
+          "backoffMs": 2000,
+          "retryBackoffMultiplier": 2
+        },
+        "nodes": [
+          {
+            "nodeId": "manager",
+            "type": "manager",
+            "memberId": "manager",
+            "label": "Lead plans, delegates and reviews",
+            "task": "Read the objective. Decompose it into workstreams and delegate them to the analyst, architect, developer and qa members, sequencing requirements and architecture before implementation and verification. Review every returned result, request fixes where work is missing or wrong, and report status complete only when the objective is genuinely delivered."
+          },
+          {
+            "nodeId": "completed",
+            "type": "terminal",
+            "label": "Delivered"
+          }
+        ],
+        "edges": [
+          {
+            "from": "manager",
+            "to": "completed",
+            "label": "delivery complete",
+            "when": {
+              "path": "output.status",
+              "operator": "in",
+              "value": [
+                "complete",
+                "completed",
+                "done",
+                "accepted",
+                "approved"
+              ]
+            }
+          },
+          {
+            "from": "manager",
+            "to": "completed",
+            "label": "delivery blocked",
+            "when": {
+              "path": "output.status",
+              "operator": "in",
+              "value": [
+                "blocked",
+                "failed",
+                "stopped"
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
