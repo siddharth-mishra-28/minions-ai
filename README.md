@@ -33,14 +33,16 @@ Pick the executable for your operating system. Each download is a single file; t
 
 | Platform | Download | First run |
 | --- | --- | --- |
-| **Windows x64** | [`minions-ai-win-x64.exe`](https://github.com/siddharth-mishra-28/minions-ai/releases/latest/download/minions-ai-win-x64.exe) | Double-click, or run `minions-ai.exe ui` |
-| **macOS Apple Silicon** | [`minions-ai-mac-arm64.zip`](https://github.com/siddharth-mishra-28/minions-ai/releases/latest/download/minions-ai-mac-arm64.zip) | Unzip, then `./minions-ai ui` |
-| **macOS Intel** | [`minions-ai-mac-x64.zip`](https://github.com/siddharth-mishra-28/minions-ai/releases/latest/download/minions-ai-mac-x64.zip) | Unzip, then `./minions-ai ui` |
-| **Linux x64** | [`minions-ai-linux-x64.tar.gz`](https://github.com/siddharth-mishra-28/minions-ai/releases/latest/download/minions-ai-linux-x64.tar.gz) | Extract, then `./minions-ai ui` |
+| **Windows x64** | [`minions-ai-win-x64.exe`](https://siddharth-mishra-28.github.io/minions-ai/downloads/minions-ai-win-x64.exe) | Double-click, or run `minions-ai.exe ui` |
+| **macOS Apple Silicon** | [`minions-ai-mac-arm64.zip`](https://siddharth-mishra-28.github.io/minions-ai/downloads/minions-ai-mac-arm64.zip) | Unzip, then `./minions-ai ui` |
+| **macOS Intel** | [`minions-ai-mac-x64.zip`](https://siddharth-mishra-28.github.io/minions-ai/downloads/minions-ai-mac-x64.zip) | Unzip, then `./minions-ai ui` |
+| **Linux x64** | [`minions-ai-linux-x64.tar.gz`](https://siddharth-mishra-28.github.io/minions-ai/downloads/minions-ai-linux-x64.tar.gz) | Extract, then `./minions-ai ui` |
 
-Checksums are published beside every release as `SHA256SUMS`. All releases: [github.com/siddharth-mishra-28/minions-ai/releases](https://github.com/siddharth-mishra-28/minions-ai/releases/latest).
+Every download above is the build from the latest commit, hosted on the project site. Verify it against [`SHA256SUMS`](https://siddharth-mishra-28.github.io/minions-ai/downloads/SHA256SUMS); tagged releases are also on [GitHub](https://github.com/siddharth-mishra-28/minions-ai/releases/latest).
 
 ### First launch
+
+Double-click the executable to start the cockpit and open it in your default browser. The explicit equivalent is `minions-ai.exe ui`; every command, option and CLI workflow is still available through arguments.
 
 **Windows**
 

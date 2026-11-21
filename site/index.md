@@ -11,13 +11,13 @@ hero:
   actions:
     - theme: brand
       text: Download for Windows
-      link: https://github.com/siddharth-mishra-28/minions-ai/releases/latest/download/minions-ai-win-x64.exe
+      link: https://siddharth-mishra-28.github.io/minions-ai/downloads/minions-ai-win-x64.exe
     - theme: alt
       text: Read the README
       link: /README
     - theme: alt
-      text: View releases
-      link: https://github.com/siddharth-mishra-28/minions-ai/releases/latest
+      text: All platforms
+      link: /#download
 
 features:
   - title: One executable, three modes
@@ -38,12 +38,14 @@ features:
 
 | Platform | Stable download |
 | --- | --- |
-| **Windows x64** | [minions-ai-win-x64.exe](https://github.com/siddharth-mishra-28/minions-ai/releases/latest/download/minions-ai-win-x64.exe) |
-| **macOS Apple Silicon** | [minions-ai-mac-arm64.zip](https://github.com/siddharth-mishra-28/minions-ai/releases/latest/download/minions-ai-mac-arm64.zip) |
-| **macOS Intel** | [minions-ai-mac-x64.zip](https://github.com/siddharth-mishra-28/minions-ai/releases/latest/download/minions-ai-mac-x64.zip) |
-| **Linux x64** | [minions-ai-linux-x64.tar.gz](https://github.com/siddharth-mishra-28/minions-ai/releases/latest/download/minions-ai-linux-x64.tar.gz) |
+| **Windows x64** | [minions-ai-win-x64.exe](https://siddharth-mishra-28.github.io/minions-ai/downloads/minions-ai-win-x64.exe) |
+| **macOS Apple Silicon** | [minions-ai-mac-arm64.zip](https://siddharth-mishra-28.github.io/minions-ai/downloads/minions-ai-mac-arm64.zip) |
+| **macOS Intel** | [minions-ai-mac-x64.zip](https://siddharth-mishra-28.github.io/minions-ai/downloads/minions-ai-mac-x64.zip) |
+| **Linux x64** | [minions-ai-linux-x64.tar.gz](https://siddharth-mishra-28.github.io/minions-ai/downloads/minions-ai-linux-x64.tar.gz) |
 
-Checksums: `SHA256SUMS` on the [latest release](https://github.com/siddharth-mishra-28/minions-ai/releases/latest).
+These files are rebuilt from the latest commit on every push. Checksums: [SHA256SUMS](https://siddharth-mishra-28.github.io/minions-ai/downloads/SHA256SUMS).
+
+Double-click the executable to start the cockpit in your default browser. From a terminal the explicit forms are:
 
 ```bash
 # Windows
@@ -61,7 +63,6 @@ The first launch opens the setup wizard. Pick your provider, test the connection
 - [Agent teams guide](/TEAMS-GUIDE) — from a clean install to a finished, auditable team run.
 - [CLI reference](/CLI) — every command and option.
 - [REST API reference](/API) — the headless surface and Swagger.
-- [Build from source](/EXECUTABLE) — packaging, asset extraction, releases and signing.
 - [Security](/SECURITY) — threat model, credential handling and binary verification.
 
 <p align="center">

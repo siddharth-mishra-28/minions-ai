@@ -15,7 +15,6 @@ const GENERATED = [
   'TEAMS-GUIDE.md',
   'A2A.md',
   'UAT.md',
-  'EXECUTABLE.md',
   'CLI.md',
   'API.md',
   'SECURITY.md',
@@ -58,6 +57,9 @@ function rewrite(markdown, source) {
   // Keep absolute public media paths stable, including hero/logo references.
   out = out.replaceAll('](/media/', '](/media/');
 
+  // The public site is for end users; keep the contributor build chapter in the repo.
+  out = out.replace(/\n## Build from source\n[\s\S]*?(?=\n## )/g, '\n');
+
   if (!out.startsWith('---\n')) out = `---\nlayout: doc\n---\n\n${out}`;
   return out;
 }
@@ -73,6 +75,7 @@ function writePage(name, sourcePath) {
 
 mkdirSync(PUBLIC, { recursive: true });
 for (const page of GENERATED) rmSync(join(SITE, page), { force: true });
+rmSync(join(SITE, 'EXECUTABLE.md'), { force: true });
 rmSync(join(PUBLIC, 'media'), { recursive: true, force: true });
 cpSync(join(ROOT, 'docs', 'media'), join(PUBLIC, 'media'), { recursive: true });
 console.log('copied docs/media -> site/public/media');
@@ -81,7 +84,6 @@ writePage('README.md', join(ROOT, 'README.md'));
 writePage('TEAMS-GUIDE.md', join(ROOT, 'docs', 'TEAMS-GUIDE.md'));
 writePage('A2A.md', join(ROOT, 'docs', 'A2A.md'));
 writePage('UAT.md', join(ROOT, 'docs', 'UAT.md'));
-writePage('EXECUTABLE.md', join(ROOT, 'docs', 'EXECUTABLE.md'));
 writePage('CLI.md', join(ROOT, 'docs', 'CLI.md'));
 writePage('API.md', join(ROOT, 'docs', 'API.md'));
 writePage('SECURITY.md', join(ROOT, 'SECURITY.md'));

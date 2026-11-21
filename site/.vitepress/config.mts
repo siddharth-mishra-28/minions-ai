@@ -13,7 +13,7 @@ export default defineConfig({
     logo: '/media/minions-ai-logo.svg',
     siteTitle: 'Minions-ai',
     nav: [
-      { text: 'Download', link: 'https://github.com/siddharth-mishra-28/minions-ai/releases/latest' },
+      { text: 'Download', link: '/#download' },
       { text: 'README', link: '/README' },
       { text: 'Teams guide', link: '/TEAMS-GUIDE' },
       { text: 'CLI', link: '/CLI' },
@@ -25,7 +25,6 @@ export default defineConfig({
         items: [
           { text: 'Overview', link: '/' },
           { text: 'Full README', link: '/README' },
-          { text: 'Build from source', link: '/EXECUTABLE' },
         ],
       },
       {

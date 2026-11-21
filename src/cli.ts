@@ -228,16 +228,20 @@ program.command('serve')
     if (opts.open) await openBrowser(url);
   });
 
+async function startCockpit(opts: { port: string; db: string; open: boolean }): Promise<void> {
+  await startServer(Number(opts.port), opts.db);
+  const url = `http://127.0.0.1:${opts.port}`;
+  console.log(`minions-ai cockpit on ${url} (docs: ${url}/docs)`);
+  if (opts.open) await openBrowser(url);
+}
+
 program.command('ui')
   .description('Start the cockpit and open it in the default browser')
   .option('--port <n>', 'Port', '3100')
   .option('--db <path>', 'SQLite path', defaultDbPath())
   .option('--no-open', 'Do not open a browser (headless machines)')
   .action(async (opts) => {
-    await startServer(Number(opts.port), opts.db);
-    const url = `http://127.0.0.1:${opts.port}`;
-    console.log(`minions-ai cockpit on ${url} (docs: ${url}/docs)`);
-    if (opts.open) await openBrowser(url);
+    await startCockpit({ port: opts.port, db: opts.db, open: opts.open });
   });
 
 program.command('list').option('--db <path>', 'SQLite path', defaultDbPath()).action((opts) => {
@@ -876,4 +880,11 @@ function isCliEntrypoint(): boolean {
   const self = real(moduleFile(import.meta.url));
   return real(argv1) === self && /cli\.(ts|js)$/.test(self);
 }
+// Double-clicking the executable passes no arguments: start the cockpit and open
+// it in the default browser. Explicit UI, API and CLI modes still use the
+// subcommands and flags above.
+program.action(async () => {
+  await startCockpit({ port: '3100', db: defaultDbPath(), open: true });
+});
+
 if (isCliEntrypoint()) void program.parseAsync(process.argv);

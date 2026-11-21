@@ -150,6 +150,31 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Stage latest downloads for the site
+        run: |
+          set -euo pipefail
+          mkdir -p site/public/downloads
+          cp dist/minions-ai-win-x64.exe site/public/downloads/
+          cp dist/minions-ai-mac-arm64 site/public/downloads/minions-ai-mac-arm64
+          cp dist/minions-ai-mac-x64 site/public/downloads/minions-ai-mac-x64
+          cp dist/minions-ai-linux-x64 site/public/downloads/minions-ai-linux-x64
+          chmod +x site/public/downloads/minions-ai-mac-arm64 site/public/downloads/minions-ai-mac-x64 site/public/downloads/minions-ai-linux-x64
+          cd site/public/downloads
+          mv minions-ai-mac-arm64 minions-ai
+          zip -q -j minions-ai-mac-arm64.zip minions-ai
+          rm minions-ai
+          mv minions-ai-mac-x64 minions-ai
+          zip -q -j minions-ai-mac-x64.zip minions-ai
+          rm minions-ai
+          mv minions-ai-linux-x64 minions-ai
+          tar -czf minions-ai-linux-x64.tar.gz minions-ai
+          rm minions-ai
+          sha256sum minions-ai-win-x64.exe minions-ai-mac-arm64.zip minions-ai-mac-x64.zip minions-ai-linux-x64.tar.gz > SHA256SUMS
+          cat SHA256SUMS
       - uses: actions/setup-node@v4
         with:
           node-version: 24.14.0
