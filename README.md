@@ -8,7 +8,6 @@
 
 <p align="center">
   <a href="https://github.com/siddharth-mishra-28/minions-ai/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/siddharth-mishra-28/minions-ai?style=flat-square"></a>
-  <a href="LICENSE"><img alt="MIT" src="https://img.shields.io/badge/license-MIT-2f6feb?style=flat-square"></a>
   <img alt="UI · API · CLI" src="https://img.shields.io/badge/UI%20%C2%B7%20API%20%C2%B7%20CLI-one%20executable-35c6a1?style=flat-square">
 </p>
 
@@ -361,3 +360,7 @@ Source setup, per-platform build commands, signing notes, the release workflow a
 ## License
 
 MIT — see [`LICENSE`](LICENSE). The acceptance record for the engine and cockpit is [`docs/UAT.md`](docs/UAT.md).
+
+---
+
+<p align="center">Developed by <a href="https://www.linkedin.com/in/connect-2-siddharth/">Siddharth Mishra</a></p>
