@@ -25,11 +25,11 @@ jobs:
             target: win-x64
             artifact: minions-ai-win-x64.exe
             binary: minions-ai-win-x64.exe
-          - os: macos-14
+          - os: macos-15
             target: mac-arm64
             artifact: minions-ai-mac-arm64
             binary: minions-ai-mac-arm64
-          - os: macos-13
+          - os: macos-15-intel
             target: mac-x64
             artifact: minions-ai-mac-x64
             binary: minions-ai-mac-x64
