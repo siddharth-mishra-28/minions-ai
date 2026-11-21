@@ -359,10 +359,6 @@ The binary is built from this repository with a reproducible pipeline that bundl
 
 Source setup, per-platform build commands, signing notes, the release workflow and the honest limits of bytecode hardening are in [`docs/EXECUTABLE.md`](docs/EXECUTABLE.md). The end-user CLI and API references are [`docs/CLI.md`](docs/CLI.md) and [`docs/API.md`](docs/API.md).
 
-## License
-
-MIT — see [`LICENSE`](LICENSE). The acceptance record for the engine and cockpit is [`docs/UAT.md`](docs/UAT.md).
-
 ---
 
 <p align="center">Developed by <a href="https://www.linkedin.com/in/connect-2-siddharth/">Siddharth Mishra</a></p>

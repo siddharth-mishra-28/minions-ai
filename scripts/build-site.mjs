@@ -41,8 +41,6 @@ function rewrite(markdown, source) {
     .replaceAll('](../UAT.md)', '](/UAT)')
     .replaceAll('](../docs/TEAMS-GUIDE.md)', '](/TEAMS-GUIDE)')
     .replaceAll('](../docs/A2A.md)', '](/A2A)')
-    .replaceAll('](LICENSE)', `](${GITHUB}/blob/main/LICENSE)`)
-    .replaceAll('](../LICENSE)', `](${GITHUB}/blob/main/LICENSE)`)
     .replaceAll('](../ci/', `](${GITHUB}/tree/main/ci/`)
     .replaceAll('../evidences', `${GITHUB}/tree/main/evidences`)
     .replaceAll('](../.gitlab-ci.yml)', `](${GITHUB})`);
@@ -58,7 +56,7 @@ function rewrite(markdown, source) {
   out = out.replaceAll('](/media/', '](/media/');
 
   // The public site is for end users; keep the contributor build chapter in the repo.
-  out = out.replace(/\n## Build from source\n[\s\S]*?(?=\n## )/g, '\n');
+  out = out.replace(/\n## Build from source\n[\s\S]*?(?=\n## |\n---)/g, '\n');
 
   // The site hosts its own downloads, so no GitHub release badge or latest-release link.
   out = out.replace(/\s*<a href="[^"]*\/releases\/latest"><img alt="Latest release"[^>]*><\/a>/g, '');

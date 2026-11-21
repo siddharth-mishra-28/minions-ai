@@ -106,7 +106,6 @@ for (const name of Object.keys(copilotFiles)) {
 writeGroup('copilot', copilotFiles);
 
 writeGroup('licenses', {
-  'LICENSE': readFileSync(join(ROOT, 'LICENSE')),
   'SECURITY.md': readFileSync(join(ROOT, 'SECURITY.md')),
   'THIRD-PARTY-NOTICES.txt': Buffer.from(
     'Minions-ai bundles Node.js (MIT), @github/copilot-sdk and its platform runtime (MIT), ' +

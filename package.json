@@ -54,8 +54,7 @@
     "docs/media/*.png",
     "docs/media/*.svg",
     "SECURITY.md",
-    "README.md",
-    "LICENSE"
+    "README.md"
   ],
   "dependencies": {
     "@fastify/static": "^10.1.7",
@@ -97,7 +96,6 @@
     "sqlite",
     "code-graph"
   ],
-  "license": "MIT",
   "publishConfig": {
     "access": "public"
   }
