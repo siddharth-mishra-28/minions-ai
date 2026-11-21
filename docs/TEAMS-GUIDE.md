@@ -44,7 +44,7 @@ does not need them.
 
 ### Install and start
 
-Download the executable from the [latest release](https://github.com/siddharth-mishra-28/minions-ai/releases/latest), then:
+Download the executable from the [project site](https://siddharth-mishra-28.github.io/minions-ai/#download), then:
 
 ```bat
 minions-ai.exe init            # provider + key, then the agents and sample team

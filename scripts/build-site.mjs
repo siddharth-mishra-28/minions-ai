@@ -60,6 +60,10 @@ function rewrite(markdown, source) {
   // The public site is for end users; keep the contributor build chapter in the repo.
   out = out.replace(/\n## Build from source\n[\s\S]*?(?=\n## )/g, '\n');
 
+  // The site hosts its own downloads, so no GitHub release badge or latest-release link.
+  out = out.replace(/\s*<a href="[^"]*\/releases\/latest"><img alt="Latest release"[^>]*><\/a>/g, '');
+  out = out.replace(/; tagged releases are also on \[GitHub\]\([^)]*\)\./g, '.');
+
   if (!out.startsWith('---\n')) out = `---\nlayout: doc\n---\n\n${out}`;
   return out;
 }
