@@ -194,9 +194,30 @@ if (target.platform === 'win32') {
   const resources = NtExecutableResource.from(exe);
   const icon = Data.IconFile.from(readFileSync(join(ROOT, 'docs', 'media', 'minions-ai.ico')));
   Resource.IconGroupEntry.replaceIconsForResource(resources.entries, 1, 1033, icon.icons.map((item) => item.data));
+
+  // pkg inherits Node.js version metadata from its base binary; brand it too so
+  // Windows surfaces (Properties, Task Manager, security prompts) say Minions-ai.
+  const versionInfo = Resource.VersionInfo.fromEntries(resources.entries)[0];
+  if (!versionInfo) throw new Error('packaged executable has no version info resource');
+  const [major, minor, patch] = VERSION.split(/[.+-]/).map((part) => Number.parseInt(part, 10) || 0);
+  versionInfo.setFileVersion(major, minor, patch, 0, 1033);
+  versionInfo.setProductVersion(major, minor, patch, 0, 1033);
+  versionInfo.setStringValues({ lang: 1033, codepage: 1200 }, {
+    CompanyName: 'Siddharth Mishra',
+    FileDescription: 'Minions-ai',
+    FileVersion: VERSION,
+    InternalName: 'minions-ai',
+    LegalCopyright: `Copyright © ${new Date().getFullYear()} Siddharth Mishra`,
+    OriginalFilename: basename(output),
+    ProductName: 'Minions-ai',
+    ProductVersion: VERSION,
+  });
+  versionInfo.outputToResourceEntries(resources.entries);
+
   resources.outputResource(exe);
   writeFileSync(output, Buffer.from(exe.generate()));
   console.log(`embedded icon: docs/media/minions-ai.ico (${icon.icons.length} sizes)`);
+  console.log(`embedded version info: Minions-ai ${VERSION}`);
 }
 
 let shipped = output;
